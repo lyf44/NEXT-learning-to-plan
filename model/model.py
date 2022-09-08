@@ -1,14 +1,18 @@
-import numpy as np
+import os
+import os.path as osp
+import sys
+sys.path.insert(0, osp.join(osp.dirname(osp.abspath(__file__)), '../'))
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions.multivariate_normal import MultivariateNormal
 
-from algorithm import RRT_EPS
-from environment import LIMITS
-from utils import load_model
+from NEXT.algorithm import RRT_EPS
+from NEXT.environment import LIMITS
+from NEXT.utils import load_model
 
 class Attention(nn.Module):
     def __init__(self, cuda=True, env_width=15, cap=8, dim=2):
@@ -44,7 +48,7 @@ class Attention(nn.Module):
         # 3rd-d attention
         self.mlp = nn.Sequential(
             nn.Linear(in_features=self.dim, out_features=64),
-            nn.ReLU(),  
+            nn.ReLU(),
             nn.Linear(in_features=64, out_features=self.cap),
         )
 
@@ -62,7 +66,7 @@ class Attention(nn.Module):
         x = x.expand(-1, -1, self.w, self.w)
         coords = self.coords.expand(x.shape[0], -1, -1, -1)
         x = torch.cat((x, coords), dim=1)
-        
+
         # attention over 2D grid
         x = self.mlp_share(x)
         x = x.view(x.shape[0], -1)
@@ -88,7 +92,7 @@ class PPN(nn.Module):
         self.w = env_width
         self.cap = cap
         self.dim = dim
-        
+
         self.g = 8
         self.latent_dim = self.cap * self.g
         self.iters = 20
@@ -102,7 +106,7 @@ class PPN(nn.Module):
 
         self.conv = nn.Conv2d(in_channels=self.latent_dim, out_channels=self.conv_cap, kernel_size=self.conv_kern, padding=self.conv_pad)
         self.lstm = nn.LSTMCell(self.conv_cap, self.latent_dim)
-        
+
         self.attention_g = Attention(cuda, env_width=env_width, cap=cap, dim=dim)
         self.attention_s = self.attention_g
 
@@ -137,7 +141,7 @@ class PPN(nn.Module):
             h_map = h_map.transpose(3, 1)
             lstm_inp = self.conv(h_map).transpose(1, 3).contiguous().view(-1, self.conv_cap)
             last_h, last_c = self.lstm(lstm_inp, (last_h, last_c))
-        
+
 
         x = last_h.view(b_size, self.w, self.w, self.latent_dim).transpose(3, 1)
         x = x.view(b_size, self.g, self.cap, self.w, self.w)
@@ -179,7 +183,7 @@ class PPN(nn.Module):
             h_map = h_map.transpose(3, 1)
             lstm_inp = self.conv(h_map).transpose(1, 3).contiguous().view(-1, self.conv_cap)
             last_h, last_c = self.lstm(lstm_inp, (last_h, last_c))
-        
+
         x = last_h.view(b_size, self.w, self.w, self.latent_dim).transpose(3, 1)
         x = x.view(b_size, self.g, self.cap, self.w, self.w)
 
@@ -191,7 +195,7 @@ class PPN(nn.Module):
         Args:
             cur_states: [batch_size, self.dim]
             pb_rep: [1, self.g, self.cap, self.w, self.w]
-            
+
         Returns:
             [actions, values]: [batch_size, self.dim + 1]
         """
@@ -241,7 +245,7 @@ class Model:
         if self.cuda:
             self.maze_map = self.maze_map.cuda()
             self.goal_state = self.goal_state.cuda()
-        
+
         self.pb_rep = self.net.pb_forward(self.goal_state, self.maze_map)
 
     def net_forward(self, states):
@@ -263,7 +267,7 @@ class Model:
             pred_values = pred_values[0]
 
         return pred_actions, pred_values
-    
+
     def pred_value(self, states):
         _, state_values = self.net_forward(states)
 
@@ -290,5 +294,5 @@ class Model:
 
     def set_net(self, net):
         self.net = net
-        
+
 
