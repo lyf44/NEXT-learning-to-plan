@@ -115,7 +115,7 @@ maze_dir = osp.join(CUR_DIR, "../dataset/gibson/train")
 model_path = osp.join(CUR_DIR, "models/next.pt")
 
 # Hyperparameters:
-visualize = True
+visualize = False
 cuda = True
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 epoch_num = 5000
@@ -173,7 +173,7 @@ for epoch in range(epoch_num):
             pos = path[idx - 1]
             next_pos = path[idx]
             dist_to_g = utils.cal_path_len(path[idx - 1:])
-            tmp_dataset.append(occ_grid, start, goal, pos, next_pos, dist_to_g)
+            tmp_dataset.append([env.map, env.init_state, env.goal_state, pos, next_pos, dist_to_g])
 
         for idx, data in enumerate(tmp_dataset):
             file_path = osp.join(data_dir, "data_{}.pkl".format(data_cnt + idx))

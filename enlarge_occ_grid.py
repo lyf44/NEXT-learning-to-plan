@@ -37,6 +37,7 @@ if __name__ == '__main__':
     print(max_x, max_y)
     width = max(max_x, max_y)
     for path in Path(data_dir).rglob('mesh_z_up.obj'):
+        print(path)
         large_occ_grid = np.ones((width, width)).astype(np.uint8)
 
         orig_occ_grid = np.loadtxt(os.path.join(path.parent, "occ_grid_fixed.txt"))
@@ -45,10 +46,15 @@ if __name__ == '__main__':
         for i in range(orig_occ_grid.shape[0]):
             for j in range(orig_occ_grid.shape[1]):
                 large_occ_grid[i, j] = orig_occ_grid[i, j]
+        print(large_occ_grid.shape)
 
-        np.savetxt(os.path.join(path.parent, "occ_grid_large.txt"), large_occ_grid)
-        print("saved to {}".format(path.parent))
+        # np.savetxt(os.path.join(path.parent, "occ_grid_large.txt"), large_occ_grid)
+        # print("saved to {}".format(path.parent))
 
         # utils.visualize_nodes_global(orig_occ_grid, [], None, None, show=False, save=True, file_name=os.path.join(path.parent, "env.png"))
         # print("here")
         # utils.visualize_nodes_global(large_occ_grid, [], None, None, show=False, save=True, file_name=os.path.join(path.parent, "env_large.png"))
+
+        import matplotlib.pyplot as plt
+        plt.imshow(large_occ_grid)
+        plt.savefig(os.path.join(path.parent, "env_large.png"))
