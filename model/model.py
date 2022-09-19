@@ -89,7 +89,8 @@ class Attention(nn.Module):
 class PPN(nn.Module):
     def __init__(self, cuda, env_width=15, cap=8, dim=2):
         super(PPN, self).__init__()
-        self.w = env_width
+        self.env_width = env_width
+        self.w = 42
         self.cap = cap
         self.dim = dim
 
@@ -99,15 +100,38 @@ class PPN(nn.Module):
         self.conv_kern = 3
         self.conv_pad = int((self.conv_kern - 1.0) / 2)
         self.conv_cap = self.cap * 8
+        self.channel_mult = 16
+        self.map_f_dim = 64
 
-        self.hidden = nn.Conv2d(in_channels=self.cap + 1, out_channels=self.latent_dim, kernel_size=3, padding=1)
+        self.hidden = nn.Conv2d(in_channels=self.cap + self.map_f_dim, out_channels=self.latent_dim, kernel_size=3, padding=1)
+        self.map_cnn = nn.Sequential(
+            nn.Conv2d(in_channels=1,
+                     out_channels=self.channel_mult*1,
+                     kernel_size=4,
+                     stride=2,
+                     padding=1), # out = (16, 5, 5)
+            nn.LeakyReLU(),
+            nn.Conv2d(self.channel_mult*1, self.channel_mult*2, 3, 2, 1), # out = (32, 3, 3)
+            nn.BatchNorm2d(self.channel_mult*2),
+            nn.LeakyReLU(),
+            nn.Conv2d(self.channel_mult*2, self.channel_mult*4, 3, 2, 1), # out = (64, 2, 2)
+            nn.BatchNorm2d(self.channel_mult*4),
+            nn.LeakyReLU(),
+            # nn.Conv2d(self.channel_mult*4, self.channel_mult*8, 4, 2, 1), # out = (128, 1, 1)
+            # nn.BatchNorm2d(self.channel_mult*8),
+            # nn.LeakyReLU(),
+            # nn.Flatten()
+            # nn.Conv2d(self.channel_mult*8, self.channel_mult*16, 3, 2, 1),
+            # nn.BatchNorm2d(self.channel_mult*16),
+            # nn.LeakyReLU(0.2, inplace=True)
+        )
         self.h0 = nn.Conv2d(in_channels=self.latent_dim, out_channels=self.latent_dim, kernel_size=3, padding=1)
         self.c0 = nn.Conv2d(in_channels=self.latent_dim, out_channels=self.latent_dim, kernel_size=3, padding=1)
 
         self.conv = nn.Conv2d(in_channels=self.latent_dim, out_channels=self.conv_cap, kernel_size=self.conv_kern, padding=self.conv_pad)
         self.lstm = nn.LSTMCell(self.conv_cap, self.latent_dim)
 
-        self.attention_g = Attention(cuda, env_width=env_width, cap=cap, dim=dim)
+        self.attention_g = Attention(cuda, env_width=self.w, cap=cap, dim=dim)
         self.attention_s = self.attention_g
 
         self.policy = nn.Sequential(
@@ -121,19 +145,23 @@ class PPN(nn.Module):
     def forward(self, cur_state, goal_state, maze_map):
         cur_state = cur_state.clone().detach()
         goal_state = goal_state.clone().detach()
-        cur_state[:,-1] /= LIMITS[2]
-        goal_state[:,-1] /= LIMITS[2]
+        # cur_state[:,-1] /= LIMITS[2]
+        # goal_state[:,-1] /= LIMITS[2]
 
         b_size = maze_map.shape[0]
 
         goal_atten = self.attention_g(goal_state) # has size [b_size, capacity, map_w, map_w]
-        maze_map = maze_map.view(b_size, 1, self.w, self.w)
-        x = torch.cat((maze_map, goal_atten), dim=1)
+        # maze_map = maze_map.view(b_size, 1, self.w, self.w)
+        # x = torch.cat((maze_map, goal_atten), dim=1)
+
+        maze_map = maze_map.view(b_size, 1, self.env_width, self.env_width)
+        maze_f = self.map_cnn(maze_map)
+        print(maze_f.shape) # [1, 64, 42, 42]
+        x = torch.cat((maze_f, goal_atten), dim=1)
 
         h_layer = self.hidden(x)
         h0 = self.h0(h_layer).transpose(1, 3).contiguous().view(b_size * self.w**2, self.latent_dim)
         c0 = self.c0(h_layer).transpose(1, 3).contiguous().view(b_size * self.w**2, self.latent_dim)
-
 
         last_h, last_c = h0, c0
         for _ in range(0, self.iters):
@@ -141,7 +169,6 @@ class PPN(nn.Module):
             h_map = h_map.transpose(3, 1)
             lstm_inp = self.conv(h_map).transpose(1, 3).contiguous().view(-1, self.conv_cap)
             last_h, last_c = self.lstm(lstm_inp, (last_h, last_c))
-
 
         x = last_h.view(b_size, self.w, self.w, self.latent_dim).transpose(3, 1)
         x = x.view(b_size, self.g, self.cap, self.w, self.w)
@@ -164,14 +191,18 @@ class PPN(nn.Module):
             pb_rep: [1, self.g, self.cap, self.w, self.w, self.w]
         """
         goal_state = goal_state.clone().detach()
-        goal_state[:,-1] /= LIMITS[2]
+        # goal_state[:,-1] /= LIMITS[2]
 
         b_size = maze_map.shape[0]
         assert b_size == 1
 
         goal_atten = self.attention_g(goal_state) # has size [b_size, capacity, map_w, map_w]
-        maze_map = maze_map.view(b_size, 1, self.w, self.w)
-        x = torch.cat((maze_map, goal_atten), dim=1)
+        maze_map = maze_map.view(b_size, 1, self.env_width, self.env_width)
+        # x = torch.cat((maze_map, goal_atten), dim=1)
+
+        maze_f = self.map_cnn(maze_map)
+        print(maze_f.shape) # [1, 64, 42, 42]
+        x = torch.cat((maze_f, goal_atten), dim=1)
 
         h_layer = self.hidden(x)
         h0 = self.h0(h_layer).transpose(1, 3).contiguous().view(b_size * self.w**2, self.latent_dim)
@@ -201,7 +232,7 @@ class PPN(nn.Module):
         """
         # if self.dim >= 3:
         cur_states = cur_states.clone().detach()
-        cur_states[:,-1] /= LIMITS[2]
+        # cur_states[:,-1] /= LIMITS[2]
 
         b_size = cur_states.shape[0]
         x = pb_rep.expand(b_size, self.g, self.cap, self.w, self.w)

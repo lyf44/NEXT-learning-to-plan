@@ -10,6 +10,7 @@ import pickle
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torch.distributions import MultivariateNormal
+from torch.utils.tensorboard import SummaryWriter
 
 from env.maze_2d import Maze2D
 import utils
@@ -105,25 +106,33 @@ class MyDataset(Dataset):
 
         return occ_grid_t, start_t, goal_t, pos_t, next_pos_t, dist_to_g_t
 
+writer = SummaryWriter(comment = '_next')
+
 # Constatns
 data_dir = osp.join(CUR_DIR, "dataset")
 maze_dir = osp.join(CUR_DIR, "../dataset/gibson/train")
 
+model_path = osp.join(CUR_DIR, "models/next.pt")
+
 # Hyperparameters:
+visualize = True
 cuda = True
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 epoch_num = 5000
 train_num = 1
-data_cnt = 0
+UCB_type = 'kde'
 robot_dim = 8
 bs = 128
 occ_grid_dim = 330
+train_step_cnt = 5000
 sigma = torch.tensor([0.5, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]).to(device)
 
 env = MyMazeEnv(robot_dim, maze_dir)
 
 model = Model(cuda = cuda, dim = robot_dim, env_width=occ_grid_dim)
-UCB_type = 'kde'
+data_cnt = 0
+train_data_cnt = train_step_cnt
+batch_num = 0
 for epoch in range(epoch_num):
     model.net.eval()
     problem = env.init_new_problem()
@@ -136,22 +145,34 @@ for epoch in range(epoch_num):
     else:
         g_explore_eps = 0.1
 
-    search_tree, done = NEXT_plan(
-        env = env,
-        model = model,
-        T = 500,
-        g_explore_eps = g_explore_eps,
-        stop_when_success = True,
-        UCB_type = UCB_type
-    )
+    # Get path
+    print("Planning...")
+    path = None
+    if g_explore_eps == 1.0:
+        path = env.expert_path
+    else:
+        search_tree, done = NEXT_plan(
+            env = env,
+            model = model,
+            T = 500,
+            g_explore_eps = g_explore_eps,
+            stop_when_success = True,
+            UCB_type = UCB_type
+        )
+        if done:
+            path = extract_path(search_tree)
 
-    if done:
-        path = extract_path(search_tree)
+    if path is not None:
+        print("Get path, saving to data")
+
+        if visualize:
+            utils.visualize_nodes_global(env.map, path, env.init_state, env.goal_state, show=False, save=True, file_name=osp.join(CUR_DIR, "tmp.png"))
+
         tmp_dataset = []
         for idx in range(1, len(path)):
             pos = path[idx - 1]
             next_pos = path[idx]
-            dist_to_g = utils.calculate_path_len(path[idx - 1:])
+            dist_to_g = utils.cal_path_len(path[idx - 1:])
             tmp_dataset.append(occ_grid, start, goal, pos, next_pos, dist_to_g)
 
         for idx, data in enumerate(tmp_dataset):
@@ -161,38 +182,51 @@ for epoch in range(epoch_num):
                 pickle.dump(tmp_dataset[idx], f)
         data_cnt += len(tmp_dataset)
 
-    model.net.train()
-    dataset = MyDataset(data_cnt, None, None)
-    dataloader = DataLoader(dataset, batch_size=bs, shuffle=True, drop_last=True, num_workers=10, pin_memory=True)
-    dataloader_it = iter(dataloader)
-    for j in range(train_num):
-        occ_grid, start, goal, pos, next_pos, dist_to_g = next(dataloader_it)
+    print("data_cnt: {}".format(data_cnt))
+    writer.add_scalar('dataset_size', data_cnt, epoch)
 
-        start = start.to(device)
-        goal = goal.to(device)
-        occ_grid = occ_grid.to(device)
-        pos = pos.to(device)
-        next_pos = next_pos.to(device)
-        dist_to_g = dist_to_g.to(device)
+    if data_cnt > train_data_cnt:
+        model.net.train()
+        dataset = MyDataset(data_cnt, None, None)
+        dataloader = DataLoader(dataset, batch_size=bs, shuffle=True, drop_last=True, num_workers=10, pin_memory=True)
+        dataloader_it = iter(dataloader)
+        for j in range(train_num):
+            occ_grid, start, goal, pos, next_pos, dist_to_g = next(dataloader_it)
 
-        problem = {
-            "map": occ_grid,
-            "init_state": start,
-            "goal_state": goal
-        }
+            start = start.to(device)
+            goal = goal.to(device)
+            occ_grid = occ_grid.to(device)
+            pos = pos.to(device)
+            next_pos = next_pos.to(device)
+            dist_to_g = dist_to_g.to(device)
 
-        model.set_problem(problem)
-        y = model.net.state_forward(pos, model.pb_rep)
-        mu = y[:, :robot_dim]
-        v = y[:, -1]
+            problem = {
+                "map": occ_grid,
+                "init_state": start,
+                "goal_state": goal
+            }
 
-        p_loss = policy_loss(sigma, mu, next_pos)
-        v_loss = value_loss(v, dist_to_g)
+            model.set_problem(problem)
+            y = model.net.state_forward(pos, model.pb_rep)
+            mu = y[:, :robot_dim]
+            v = y[:, -1]
 
-        loss = p_loss + v_loss
+            p_loss = policy_loss(sigma, mu, next_pos)
+            v_loss = value_loss(v, dist_to_g)
 
-        loss.backward()
+            loss = p_loss + v_loss
 
+            loss.backward()
 
+            print('Loss after epoch %d, batch_num %d, dataset_sizes %d: , p_loss: %.3f, v_loss: %.3f' % (epoch, batch_num, data_cnt, p_loss.item(), v_loss.item()))
+            writer.add_scalar('p_loss/train', p_loss.item(), batch_num)
+            writer.add_scalar('v_loss/train', v_loss.item(), batch_num)
+
+            batch_num += 1
+
+            torch.save(model.state_dict(), model_path)
+            print("saved session to ", model_path)
+
+        train_data_cnt += train_step_cnt
 
 

@@ -283,13 +283,20 @@ class MyMazeEnv(MazeEnv):
 
         occ_grid = np.loadtxt(osp.join(maze_dir, "occ_grid_large.txt")).astype(np.uint8)
         G = nx.read_graphml(osp.join(maze_dir, "dense_g.graphml"))
+        mesh = osp.join(maze_dir, "env.obj")
 
-        start, goal = self.sample_problems(G)
+        self._maze.clear_obstacles()
+        self._maze.load_mesh(mesh)
+        self._maze.load_occupancy_grid(occ_grid)
+
+        start, goal, expert_path = self.sample_problems(G)
 
         self.map = occ_grid
         self.init_state = start
         self.goal_state = goal
         self.episode_i += 1
+
+        self.expert_path = expert_path
 
         if self.episode_i >= self.size:
             self.episode_i = 0
@@ -398,7 +405,8 @@ class MyMazeEnv(MazeEnv):
             goal_pos = utils.node_to_numpy(G, g_name)
 
             try:
-                path = nx.shortest_path(G, source=s_name, target = g_name)
+                path = nx.shortest_path(G, source=s_name, target=g_name)
+                # path_pos = [utils.node_to_numpy(G, n) for n in path]
             except:
                 continue
 
@@ -412,4 +420,4 @@ class MyMazeEnv(MazeEnv):
 
             i += 1
 
-        return start_pos, goal_pos
+        return start_pos, goal_pos, p
