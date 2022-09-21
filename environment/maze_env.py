@@ -297,6 +297,13 @@ class MyMazeEnv(MazeEnv):
 
         start, goal, expert_path = self.sample_problems(G)
 
+        expert_path_2 = utils.interpolate(expert_path)
+        utils.visualize_nodes_global(occ_grid_gt, expert_path_2, start, goal, show=False, save=True, file_name="viz.png")
+        for i in range(1, len(expert_path)):
+            v1 = expert_path[i - 1]
+            v2 = expert_path[i]
+            assert utils.is_edge_free(self._maze, v1, v2)
+
         self.map = occ_grid
         self.init_state = start
         self.goal_state = goal
@@ -371,7 +378,6 @@ class MyMazeEnv(MazeEnv):
         if action is not None:
             new_state = state + action
 
-        new_state[:2] = new_state[:2].clip(-LIMITS[:-1], LIMITS[:-1])
         # if self.dim >= 3:
         #     if np.abs(new_state[2]) > LIMITS[2]:
         #         if new_state[2] > 0:
@@ -386,7 +392,16 @@ class MyMazeEnv(MazeEnv):
             return new_state, action
 
         done = False
-        no_collision = self._edge_fp(state, new_state)
+        # no_collision = self._edge_fp(state, new_state)
+        res_new_state = np.array(utils.rrt_extend(self._maze, state, new_state))
+        # print("env.step", state, new_state, res_new_state)
+        if not np.allclose(res_new_state, state):
+            no_collision = True
+            new_state = res_new_state
+            action = new_state - state
+        else:
+            no_collision = False
+
         if no_collision and self.in_goal_region(new_state):
             done = True
 
@@ -394,6 +409,9 @@ class MyMazeEnv(MazeEnv):
 
     def _edge_fp(self, state, new_state):
         return utils.is_edge_free(self._maze, state, new_state)
+
+    def _state_fp(self, state):
+        return self._maze.pb_ompl_interface.is_state_valid(state.tolist())
 
     def sample_problems(self, G):
         # path = dict(nx.all_pairs_shortest_path(G))

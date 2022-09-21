@@ -145,7 +145,7 @@ if args.checkpoint != '':
     model.net.load_state_dict(torch.load(osp.join(CUR_DIR, 'models/{}.pt'.format(args.checkpoint))))
 
 data_cnt = 10000
-train_data_cnt = train_step_cnt
+train_data_cnt = 10000
 batch_num = 0
 best_loss = float('inf')
 for epoch in range(start_epoch, epoch_num):
