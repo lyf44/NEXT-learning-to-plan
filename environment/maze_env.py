@@ -289,6 +289,12 @@ class MyMazeEnv(MazeEnv):
         self._maze.load_mesh(mesh)
         self._maze.load_occupancy_grid(occ_grid)
 
+        occ_grid_gt = np.loadtxt(osp.join(maze_dir, "occ_grid.txt")).astype(np.uint8)
+        base_x_bounds = [0, occ_grid_gt.shape[0]]
+        base_y_bounds = [0, occ_grid_gt.shape[1]]
+        print(occ_grid_gt.shape)
+        self._maze.robot.set_base_bounds(base_x_bounds, base_y_bounds)
+
         start, goal, expert_path = self.sample_problems(G)
 
         self.map = occ_grid
