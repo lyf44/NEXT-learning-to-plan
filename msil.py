@@ -11,8 +11,9 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torch.distributions import MultivariateNormal
 from torch.utils.tensorboard import SummaryWriter
+import argparse
 
-from env.maze_2d import Maze2D
+# from env.maze_2d import Maze2D
 import utils
 from NEXT.model import Model
 from NEXT.algorithm import NEXT_plan, RRTS_plan
@@ -50,7 +51,7 @@ def policy_loss(sigma, mu, target):
 
     # prob = gaussian_probability(sigma, mu, target)
     # nll = -torch.log(torch.sum(prob, dim=1))
-    return -prob
+    return -torch.mean(prob)
 
 def value_loss(pred, target):
     mse_loss = torch.nn.MSELoss()
@@ -100,11 +101,16 @@ class MyDataset(Dataset):
         start_t = torch.Tensor(start)
         goal_t = torch.Tensor(goal)
         occ_grid_t = torch.Tensor(occ_grid).view(1, occ_grid_dim, occ_grid_dim)
-        pos_t = torch.Tensor(pos).view(1, robot_dim)
-        next_pos_t = torch.Tensor(next_pos).view(-1, robot_dim)
+        pos_t = torch.Tensor(pos)
+        next_pos_t = torch.Tensor(next_pos)
         dist_to_g_t = torch.Tensor([dist_to_g])
 
         return occ_grid_t, start_t, goal_t, pos_t, next_pos_t, dist_to_g_t
+
+parser = argparse.ArgumentParser(description='Process some integers.')
+parser.add_argument('--name', default='1')
+parser.add_argument('--checkpoint', default='')
+args = parser.parse_args()
 
 writer = SummaryWriter(comment = '_next')
 
@@ -113,6 +119,7 @@ data_dir = osp.join(CUR_DIR, "dataset")
 maze_dir = osp.join(CUR_DIR, "../dataset/gibson/train")
 
 model_path = osp.join(CUR_DIR, "models/next.pt")
+best_model_path = osp.join(CUR_DIR, "models/next_best.pt")
 
 # Hyperparameters:
 visualize = False
@@ -122,18 +129,26 @@ epoch_num = 5000
 train_num = 1
 UCB_type = 'kde'
 robot_dim = 8
-bs = 128
+bs = 32
 occ_grid_dim = 330
 train_step_cnt = 5000
+start_epoch = 1000
+lr = 0.01
 sigma = torch.tensor([0.5, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]).to(device)
 
 env = MyMazeEnv(robot_dim, maze_dir)
 
 model = Model(cuda = cuda, dim = robot_dim, env_width=occ_grid_dim)
-data_cnt = 0
+
+if args.checkpoint != '':
+    print("Loading checkpoint {}.pt".format(args.checkpoint))
+    model.net.load_state_dict(torch.load(osp.join(CUR_DIR, 'models/{}.pt'.format(args.checkpoint))))
+
+data_cnt = 10000
 train_data_cnt = train_step_cnt
 batch_num = 0
-for epoch in range(epoch_num):
+best_loss = float('inf')
+for epoch in range(start_epoch, epoch_num):
     model.net.eval()
     problem = env.init_new_problem()
     model.set_problem(problem)
@@ -146,7 +161,7 @@ for epoch in range(epoch_num):
         g_explore_eps = 0.1
 
     # Get path
-    print("Planning...")
+    print("Planning... with explore_eps: {}".format(g_explore_eps))
     path = None
     if g_explore_eps == 1.0:
         path = env.expert_path
@@ -154,7 +169,7 @@ for epoch in range(epoch_num):
         search_tree, done = NEXT_plan(
             env = env,
             model = model,
-            T = 500,
+            T = 1000,
             g_explore_eps = g_explore_eps,
             stop_when_success = True,
             UCB_type = UCB_type
@@ -187,45 +202,61 @@ for epoch in range(epoch_num):
 
     if data_cnt > train_data_cnt:
         model.net.train()
+        # Define the loss function and optimizer
+        optimizer = torch.optim.Adam(model.net.parameters(), lr=lr, weight_decay=0.00005)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=10000, verbose=True, factor=0.5)
+
         dataset = MyDataset(data_cnt, None, None)
         dataloader = DataLoader(dataset, batch_size=bs, shuffle=True, drop_last=True, num_workers=10, pin_memory=True)
-        dataloader_it = iter(dataloader)
         for j in range(train_num):
-            occ_grid, start, goal, pos, next_pos, dist_to_g = next(dataloader_it)
+            for data in dataloader:
+                occ_grid, start, goal, pos, next_pos, dist_to_g = data
 
-            start = start.to(device)
-            goal = goal.to(device)
-            occ_grid = occ_grid.to(device)
-            pos = pos.to(device)
-            next_pos = next_pos.to(device)
-            dist_to_g = dist_to_g.to(device)
+                start = start.to(device)
+                goal = goal.to(device)
+                occ_grid = occ_grid.to(device)
+                pos = pos.to(device)
+                next_pos = next_pos.to(device)
+                dist_to_g = dist_to_g.to(device)
 
-            problem = {
-                "map": occ_grid,
-                "init_state": start,
-                "goal_state": goal
-            }
+                # problem = {
+                #     "map": occ_grid,
+                #     "init_state": start,
+                #     "goal_state": goal
+                # }
 
-            model.set_problem(problem)
-            y = model.net.state_forward(pos, model.pb_rep)
-            mu = y[:, :robot_dim]
-            v = y[:, -1]
+                pb_rep = model.net.pb_forward(goal, occ_grid)
+                y = model.net.state_forward(pos, pb_rep)
+                mu = y[:, :robot_dim]
+                v = y[:, -1].view(bs, 1)
 
-            p_loss = policy_loss(sigma, mu, next_pos)
-            v_loss = value_loss(v, dist_to_g)
+                p_loss = policy_loss(sigma, mu, next_pos)
+                v_loss = value_loss(v, dist_to_g)
 
-            loss = p_loss + v_loss
+                loss = p_loss + v_loss
 
-            loss.backward()
+                # Zero the gradients
+                optimizer.zero_grad()
 
-            print('Loss after epoch %d, batch_num %d, dataset_sizes %d: , p_loss: %.3f, v_loss: %.3f' % (epoch, batch_num, data_cnt, p_loss.item(), v_loss.item()))
-            writer.add_scalar('p_loss/train', p_loss.item(), batch_num)
-            writer.add_scalar('v_loss/train', v_loss.item(), batch_num)
+                loss.backward()
 
-            batch_num += 1
+                # Perform optimization
+                optimizer.step()
 
-            torch.save(model.state_dict(), model_path)
-            print("saved session to ", model_path)
+                scheduler.step(loss)
+
+                print('Loss after epoch %d, batch_num %d, dataset_sizes %d: , p_loss: %.3f, v_loss: %.3f' % (epoch, batch_num, data_cnt, p_loss.item(), v_loss.item()))
+                writer.add_scalar('p_loss/train', p_loss.item(), batch_num)
+                writer.add_scalar('v_loss/train', v_loss.item(), batch_num)
+
+                batch_num += 1
+
+                torch.save(model.net.state_dict(), model_path)
+                print("saved session to ", model_path)
+
+                if loss.item() < best_loss:
+                    torch.save(model.net.state_dict(), best_model_path)
+                    print("saved session to ", best_model_path)
 
         train_data_cnt += train_step_cnt
 

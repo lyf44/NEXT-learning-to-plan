@@ -184,24 +184,24 @@ class PPN(nn.Module):
         """Compute the problem representation.
 
         Args:
-            goal_state: [1, self.dim]
-            maze_map: [1, self.w, self.w, self.w]
+            goal_state: [bs, self.dim]
+            maze_map: [bs, 1, self.w, self.w]
 
         Returns:
-            pb_rep: [1, self.g, self.cap, self.w, self.w, self.w]
+            pb_rep: [bs, self.g, self.cap, self.w, self.w]
         """
         goal_state = goal_state.clone().detach()
         # goal_state[:,-1] /= LIMITS[2]
 
         b_size = maze_map.shape[0]
-        assert b_size == 1
+        # assert b_size == 1
 
         goal_atten = self.attention_g(goal_state) # has size [b_size, capacity, map_w, map_w]
         maze_map = maze_map.view(b_size, 1, self.env_width, self.env_width)
         # x = torch.cat((maze_map, goal_atten), dim=1)
 
         maze_f = self.map_cnn(maze_map)
-        print(maze_f.shape) # [1, 64, 42, 42]
+        print(maze_f.shape) # [bs, 64, 42, 42]
         x = torch.cat((maze_f, goal_atten), dim=1)
 
         h_layer = self.hidden(x)
@@ -225,17 +225,21 @@ class PPN(nn.Module):
 
         Args:
             cur_states: [batch_size, self.dim]
-            pb_rep: [1, self.g, self.cap, self.w, self.w]
+            pb_rep: [bs, self.g, self.cap, self.w, self.w]
 
         Returns:
             [actions, values]: [batch_size, self.dim + 1]
         """
         # if self.dim >= 3:
         cur_states = cur_states.clone().detach()
+        # print(cur_states.shape)
         # cur_states[:,-1] /= LIMITS[2]
 
         b_size = cur_states.shape[0]
-        x = pb_rep.expand(b_size, self.g, self.cap, self.w, self.w)
+        if b_size != pb_rep.shape[0]:
+            x = pb_rep.expand(b_size, self.g, self.cap, self.w, self.w)
+        else:
+            x = pb_rep.view(b_size, self.g, self.cap, self.w, self.w)
 
         state_atten = self.attention_s(cur_states).view(b_size, 1, self.cap, self.w, self.w)
         x = x * state_atten
@@ -269,15 +273,18 @@ class Model:
 
         # compute problem representation
         assert self.net
-        self.maze_map = problem["map"].reshape(1, self.env_width, self.env_width)
-        self.goal_state = problem["goal_state"].reshape(1, self.dim)
+        self.maze_map = problem["map"].reshape(-1, 1, self.env_width, self.env_width)
+        self.goal_state = problem["goal_state"].reshape(-1, self.dim)
         self.maze_map = torch.FloatTensor(self.maze_map)
         self.goal_state = torch.FloatTensor(self.goal_state)
         if self.cuda:
             self.maze_map = self.maze_map.cuda()
             self.goal_state = self.goal_state.cuda()
 
-        self.pb_rep = self.net.pb_forward(self.goal_state, self.maze_map)
+        self.pb_forward(self.goal_state, self.maze_map)
+
+    def pb_forward(self, goal_state, maze_map):
+        self.pb_rep = self.net.pb_forward(goal_state, maze_map)
 
     def net_forward(self, states):
         if states.ndim == 1:
