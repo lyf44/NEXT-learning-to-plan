@@ -282,14 +282,14 @@ class MyMazeEnv(MazeEnv):
         print("Init new problems on ", maze_dir)
 
         occ_grid = np.loadtxt(osp.join(maze_dir, "occ_grid_large.txt")).astype(np.uint8)
-        G = nx.read_graphml(osp.join(maze_dir, "dense_g.graphml"))
+        G = nx.read_graphml(osp.join(maze_dir, "dense_g_fixed.graphml"))
         mesh = osp.join(maze_dir, "env.obj")
 
         self._maze.clear_obstacles()
         self._maze.load_mesh(mesh)
         self._maze.load_occupancy_grid(occ_grid)
 
-        occ_grid_gt = np.loadtxt(osp.join(maze_dir, "occ_grid.txt")).astype(np.uint8)
+        occ_grid_gt = np.loadtxt(osp.join(maze_dir, "occ_grid_fixed.txt")).astype(np.uint8)
         base_x_bounds = [0, occ_grid_gt.shape[0]]
         base_y_bounds = [0, occ_grid_gt.shape[1]]
         print(occ_grid_gt.shape)
@@ -297,14 +297,15 @@ class MyMazeEnv(MazeEnv):
 
         start, goal, expert_path = self.sample_problems(G)
 
-        expert_path_2 = utils.interpolate(expert_path)
-        utils.visualize_nodes_global(occ_grid_gt, expert_path_2, start, goal, show=False, save=True, file_name="viz.png")
-        for i in range(1, len(expert_path)):
-            v1 = expert_path[i - 1]
-            v2 = expert_path[i]
-            assert utils.is_edge_free(self._maze, v1, v2)
+        # expert_path_2 = utils.interpolate(expert_path)
+        # utils.visualize_nodes_global(occ_grid_gt, expert_path_2, start, goal, show=False, save=True, file_name="viz.png")
+        # for i in range(1, len(expert_path)):
+        #     v1 = expert_path[i - 1]
+        #     v2 = expert_path[i]
+        #     assert utils.is_edge_free(self._maze, v1, v2)
 
         self.map = occ_grid
+        self.map_orig = occ_grid_gt
         self.init_state = start
         self.goal_state = goal
         self.episode_i += 1
@@ -397,15 +398,14 @@ class MyMazeEnv(MazeEnv):
         # print("env.step", state, new_state, res_new_state)
         if not np.allclose(res_new_state, state):
             no_collision = True
-            new_state = res_new_state
             action = new_state - state
         else:
             no_collision = False
 
-        if no_collision and self.in_goal_region(new_state):
+        if no_collision and self.in_goal_region(res_new_state):
             done = True
 
-        return new_state, action, no_collision, done
+        return res_new_state, action, no_collision, done
 
     def _edge_fp(self, state, new_state):
         return utils.is_edge_free(self._maze, state, new_state)
@@ -439,7 +439,7 @@ class MyMazeEnv(MazeEnv):
             #     x[0] += 2
             #     x[1] += 2
 
-            if len(p) > 0 and math.fabs(goal_pos[0] - start_pos[0]) > 2 and math.fabs(goal_pos[1] - start_pos[1]) > 2:
+            if len(p) > 2 and math.fabs(goal_pos[0] - start_pos[0]) > 2 and math.fabs(goal_pos[1] - start_pos[1]) > 2:
                 break
 
             i += 1

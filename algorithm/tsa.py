@@ -125,17 +125,21 @@ def global_explore(search_tree, env, sample_state=None):
     # Steer sample to nearby location
     dists = env.distance(non_terminal_states, sample_state)
     nearest_idx, min_dist = np.argmin(dists), np.min(dists)
-    new_state = RRT_steer(env, sample_state, non_terminal_states[nearest_idx], \
-                        min_dist)
+    # new_state = RRT_steer(env, sample_state, non_terminal_states[nearest_idx], \
+    #                     min_dist)
+    new_state = sample_state
 
-    new_state, action, no_collision, done = env.step(
+    res_new_state, action, no_collision, done = env.step(
         state = non_terminal_states[nearest_idx],
         new_state = new_state
     )
 
-    print("rrt_extend", non_terminal_states[nearest_idx], new_state, no_collision, done)
+    print("rrt_extend", non_terminal_states[nearest_idx], sample_state, res_new_state, no_collision, done)
 
-    return new_state, search_tree.non_terminal_idxes[nearest_idx], action, \
+    if np.allclose(res_new_state, non_terminal_states[nearest_idx]):
+        res_new_state = new_state
+
+    return res_new_state, search_tree.non_terminal_idxes[nearest_idx], action, \
         no_collision, done
 
 def select(search_tree, env, c=1., use_GP=False):
@@ -205,12 +209,14 @@ def expand(search_tree, idx, model, env, k=10, c=1., use_GP=False):
     else:
         new_state = candidates[0]
 
+    target_state = new_state
+
     new_state, action, no_collision, done = env.step(
         state = state,
         new_state = new_state
     )
 
-    print("neural_extend", state, new_state, no_collision, done)
+    print("neural_extend", state, target_state, new_state, no_collision, done)
     return new_state, action, no_collision, done
 
 def RRTS_rewire_last(env, search_tree, neighbor_r=None, obs_cost=2):

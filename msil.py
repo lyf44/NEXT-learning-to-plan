@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 from torch.distributions import MultivariateNormal
 from torch.utils.tensorboard import SummaryWriter
 import argparse
+import numpy as np
 
 # from env.maze_2d import Maze2D
 import utils
@@ -125,14 +126,13 @@ best_model_path = osp.join(CUR_DIR, "models/next_best.pt")
 visualize = False
 cuda = True
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-epoch_num = 5000
+epoch_num = 4000
 train_num = 1
 UCB_type = 'kde'
 robot_dim = 8
 bs = 32
 occ_grid_dim = 330
 train_step_cnt = 5000
-start_epoch = 1000
 lr = 0.01
 sigma = torch.tensor([0.5, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]).to(device)
 
@@ -144,18 +144,20 @@ if args.checkpoint != '':
     print("Loading checkpoint {}.pt".format(args.checkpoint))
     model.net.load_state_dict(torch.load(osp.join(CUR_DIR, 'models/{}.pt'.format(args.checkpoint))))
 
-data_cnt = 10000
-train_data_cnt = 10000
+start_epoch = 0
+data_cnt = 0
+train_data_cnt = 2500
 batch_num = 0
 best_loss = float('inf')
+success_rate = []
 for epoch in range(start_epoch, epoch_num):
     model.net.eval()
     problem = env.init_new_problem()
     model.set_problem(problem)
 
-    if epoch < 1000:
+    if epoch < 1500:
         g_explore_eps = 1.0
-    elif epoch < 2000:
+    elif epoch < 3000:
         g_explore_eps = 0.5 - 0.1 * (epoch - 1000) / 200
     else:
         g_explore_eps = 0.1
@@ -175,13 +177,17 @@ for epoch in range(start_epoch, epoch_num):
             UCB_type = UCB_type
         )
         if done:
+            success_rate.append(1)
             path = extract_path(search_tree)
+        else:
+            success_rate.append(0)
 
     if path is not None:
         print("Get path, saving to data")
 
         if visualize:
-            utils.visualize_nodes_global(env.map, path, env.init_state, env.goal_state, show=False, save=True, file_name=osp.join(CUR_DIR, "tmp.png"))
+            path_tmp = utils.interpolate(path)
+            utils.visualize_nodes_global(env.map_orig, path_tmp, env.init_state, env.goal_state, show=False, save=True, file_name=osp.join(CUR_DIR, "tmp.png"))
 
         tmp_dataset = []
         for idx in range(1, len(path)):
@@ -199,6 +205,12 @@ for epoch in range(start_epoch, epoch_num):
 
     print("data_cnt: {}".format(data_cnt))
     writer.add_scalar('dataset_size', data_cnt, epoch)
+
+    if len(success_rate) > 100:
+        success_rate.pop(0)
+        avg_success_rate = np.sum(np.array(success_rate)) / 100
+        print("Average success rate: ", avg_success_rate)
+        writer.add_scalar('avg_success_rate', avg_success_rate, epoch)
 
     if data_cnt > train_data_cnt:
         model.net.train()
