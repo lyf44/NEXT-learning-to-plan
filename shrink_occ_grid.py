@@ -70,7 +70,8 @@ if __name__ == '__main__':
         plt.imshow(small_occ_grid)
         plt.savefig(os.path.join(path.parent, "env_small.png"))
 
-        small_occ_grid = np.repeat(np.expand_dims(small_occ_grid, 2), 5, axis=2) # repeat z 5 times
+        # small_occ_grid = np.repeat(np.expand_dims(small_occ_grid, 2), 2, axis=2) # repeat z 5 times
+        small_occ_grid = np.expand_dims(small_occ_grid, 2)
         new_mesh = trimesh.voxel.ops.matrix_to_marching_cubes(small_occ_grid, pitch=0.1)
         # new_mesh.show()
 
