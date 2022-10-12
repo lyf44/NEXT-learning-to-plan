@@ -13,6 +13,7 @@ from torch.distributions import MultivariateNormal
 from torch.utils.tensorboard import SummaryWriter
 import argparse
 import numpy as np
+import torch.multiprocessing as mp
 
 # from env.maze_2d import Maze2D
 import utils
@@ -123,17 +124,19 @@ model_path = osp.join(CUR_DIR, "models/next.pt")
 best_model_path = osp.join(CUR_DIR, "models/next_best.pt")
 
 # Hyperparameters:
-visualize = False
+visualize = True
 cuda = True
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-epoch_num = 4000
+epoch_num = 60000
 train_num = 1
 UCB_type = 'kde'
 robot_dim = 8
 bs = 32
-occ_grid_dim = 330
-train_step_cnt = 5000
+occ_grid_dim = 100
+train_step_cnt = 1000
 lr = 0.01
+alpha_p = 1
+alpha_v = 1 / 33.0
 sigma = torch.tensor([0.5, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]).to(device)
 
 env = MyMazeEnv(robot_dim, maze_dir)
@@ -146,7 +149,7 @@ if args.checkpoint != '':
 
 start_epoch = 0
 data_cnt = 0
-train_data_cnt = 2500
+train_data_cnt = train_step_cnt
 batch_num = 0
 best_loss = float('inf')
 success_rate = []
@@ -155,9 +158,9 @@ for epoch in range(start_epoch, epoch_num):
     problem = env.init_new_problem()
     model.set_problem(problem)
 
-    if epoch < 1500:
+    if epoch < 20000:
         g_explore_eps = 1.0
-    elif epoch < 3000:
+    elif epoch < 40000:
         g_explore_eps = 0.5 - 0.1 * (epoch - 1000) / 200
     else:
         g_explore_eps = 0.1
@@ -165,22 +168,21 @@ for epoch in range(start_epoch, epoch_num):
     # Get path
     print("Planning... with explore_eps: {}".format(g_explore_eps))
     path = None
-    if g_explore_eps == 1.0:
-        path = env.expert_path
+    # if g_explore_eps == 1.0:
+    #     path = env.expert_path
+    search_tree, done = NEXT_plan(
+        env = env,
+        model = model,
+        T = 500,
+        g_explore_eps = g_explore_eps,
+        stop_when_success = True,
+        UCB_type = UCB_type
+    )
+    if done:
+        success_rate.append(1)
+        path = extract_path(search_tree)
     else:
-        search_tree, done = NEXT_plan(
-            env = env,
-            model = model,
-            T = 1000,
-            g_explore_eps = g_explore_eps,
-            stop_when_success = True,
-            UCB_type = UCB_type
-        )
-        if done:
-            success_rate.append(1)
-            path = extract_path(search_tree)
-        else:
-            success_rate.append(0)
+        success_rate.append(0)
 
     if path is not None:
         print("Get path, saving to data")
@@ -245,7 +247,7 @@ for epoch in range(start_epoch, epoch_num):
                 p_loss = policy_loss(sigma, mu, next_pos)
                 v_loss = value_loss(v, dist_to_g)
 
-                loss = p_loss + v_loss
+                loss = alpha_p * p_loss + alpha_v * v_loss
 
                 # Zero the gradients
                 optimizer.zero_grad()
@@ -263,12 +265,12 @@ for epoch in range(start_epoch, epoch_num):
 
                 batch_num += 1
 
-                torch.save(model.net.state_dict(), model_path)
-                print("saved session to ", model_path)
-
                 if loss.item() < best_loss:
                     torch.save(model.net.state_dict(), best_model_path)
                     print("saved session to ", best_model_path)
+
+            torch.save(model.net.state_dict(), model_path)
+            print("saved session to ", model_path)
 
         train_data_cnt += train_step_cnt
 

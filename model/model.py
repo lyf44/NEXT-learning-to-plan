@@ -90,7 +90,7 @@ class PPN(nn.Module):
     def __init__(self, cuda, env_width=15, cap=8, dim=2):
         super(PPN, self).__init__()
         self.env_width = env_width
-        self.w = 42
+        self.w = 13
         self.cap = cap
         self.dim = dim
 
@@ -201,7 +201,7 @@ class PPN(nn.Module):
         # x = torch.cat((maze_map, goal_atten), dim=1)
 
         maze_f = self.map_cnn(maze_map)
-        print(maze_f.shape) # [bs, 64, 42, 42]
+        print(maze_f.shape) # [bs, 64, 13, 13]
         x = torch.cat((maze_f, goal_atten), dim=1)
 
         h_layer = self.hidden(x)
@@ -262,7 +262,8 @@ class Model:
             self.net = self.net.cuda()
         self.std = std
         self.dim = dim
-        self.var = torch.eye(self.dim)*self.std**2
+        # self.var = torch.eye(self.dim)*self.std**2
+        self.var = torch.tensor([0.5, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
         print('dim == ', dim)
 
         self.env_width=env_width
@@ -313,7 +314,7 @@ class Model:
 
     def policy(self, state, k=1):
         action_mean, _ = self.net_forward(state)
-        m = MultivariateNormal(torch.FloatTensor(action_mean), self.var)
+        m = MultivariateNormal(torch.FloatTensor(action_mean), torch.diag(self.var))
 
         actions = []
         prior_values = []

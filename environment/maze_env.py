@@ -267,6 +267,7 @@ class MyMazeEnv(MazeEnv):
 
         # self.size = self.maps.shape[0]
         self.size = len(self.maps)
+        print(self.size)
         # self.width = self.maps.shape[1]
         self.order = list(range(self.size))
         self.episode_i = 0
@@ -281,15 +282,15 @@ class MyMazeEnv(MazeEnv):
         maze_dir = self.maps[self.order[index]]
         print("Init new problems on ", maze_dir)
 
-        occ_grid = np.loadtxt(osp.join(maze_dir, "occ_grid_large.txt")).astype(np.uint8)
-        G = nx.read_graphml(osp.join(maze_dir, "dense_g_fixed.graphml"))
-        mesh = osp.join(maze_dir, "env.obj")
+        occ_grid = np.loadtxt(osp.join(maze_dir, "occ_grid_small.txt")).astype(np.uint8)
+        G = nx.read_graphml(osp.join(maze_dir, "dense_g_small.graphml"))
+        mesh = osp.join(maze_dir, "env_small.obj")
 
         self._maze.clear_obstacles()
         self._maze.load_mesh(mesh)
         self._maze.load_occupancy_grid(occ_grid)
 
-        occ_grid_gt = np.loadtxt(osp.join(maze_dir, "occ_grid_fixed.txt")).astype(np.uint8)
+        occ_grid_gt = np.loadtxt(osp.join(maze_dir, "occ_grid_small.txt")).astype(np.uint8)
         base_x_bounds = [0, occ_grid_gt.shape[0]]
         base_y_bounds = [0, occ_grid_gt.shape[1]]
         print(occ_grid_gt.shape)
