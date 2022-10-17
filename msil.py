@@ -69,8 +69,10 @@ def extract_path(search_tree):
         parent_id = search_tree.rewired_parents[id]
         if parent_id:
             path.append(search_tree.states[parent_id])
+
         id = parent_id
 
+    path.append(search_tree.non_terminal_states[0]) # append the init state
     path.reverse()
 
     return path
@@ -188,6 +190,9 @@ for epoch in range(start_epoch, epoch_num):
         print("Get path, saving to data")
 
         if visualize:
+            print(path[0], env.init_state, path[-1], env.goal_state)
+            assert np.allclose(np.array(path[0]), np.array(env.init_state))
+            assert np.allclose(np.array(path[-1]), np.array(env.goal_state))
             path_tmp = utils.interpolate(path)
             utils.visualize_nodes_global(env.map_orig, path_tmp, env.init_state, env.goal_state, show=False, save=True, file_name=osp.join(CUR_DIR, "tmp.png"))
 
