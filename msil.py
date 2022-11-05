@@ -1,7 +1,8 @@
 import os
 import os.path as osp
 import sys
-sys.path.insert(0, osp.join(osp.dirname(osp.abspath(__file__)), '../'))
+
+sys.path.insert(0, osp.join(osp.dirname(osp.abspath(__file__)), "../"))
 
 import torch
 import math
@@ -42,6 +43,7 @@ ONEOVERSQRT2PI = 1.0 / math.sqrt(2 * math.pi)
 #     ret = ONEOVERSQRT2PI * torch.exp(-0.5 * ((target - mu) / sigma)**2) / sigma
 #     return torch.prod(ret, 2)
 
+
 def policy_loss(sigma, mu, target):
     """Calculates the error, given the MoG parameters and the target
     The loss is the negative log likelihood of the data given the MoG
@@ -57,12 +59,14 @@ def policy_loss(sigma, mu, target):
     loss = mse_loss(mu, target)
     return loss
 
+
 def value_loss(pred, target):
     loss = mse_loss(pred, target)
     return loss
 
+
 def extract_path(search_tree):
-    leaf_id = search_tree.states.shape[0]-1
+    leaf_id = search_tree.states.shape[0] - 1
 
     path = [search_tree.states[leaf_id]]
     id = leaf_id
@@ -73,13 +77,16 @@ def extract_path(search_tree):
 
         id = parent_id
 
-    path.append(search_tree.non_terminal_states[0]) # append the init state
+    path.append(search_tree.non_terminal_states[0])  # append the init state
     path.reverse()
 
     return path
 
+
 class MyDataset(Dataset):
-    def __init__(self, env, dataset_size, transform=None, target_transform=None, device="cpu"):
+    def __init__(
+        self, env, dataset_size, transform=None, target_transform=None, device="cpu"
+    ):
         print("Instantiating dataset...")
         self.transform = transform
         self.target_transform = target_transform
@@ -94,7 +101,7 @@ class MyDataset(Dataset):
 
     def __getitem__(self, idx):
         file_path = osp.join(data_dir, "data_{}.pkl".format(idx))
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             data = pickle.load(f)
 
         # low = torch.Tensor([-2, -2, -math.pi, -math.pi, -math.pi, -math.pi, -math.pi, -math.pi]).view(1, -1)
@@ -121,11 +128,14 @@ class MyDataset(Dataset):
 
         action_t = next_pos_t - pos_t
         edge_cost = torch.linalg.norm(action_t[:2]).item()
-        if edge_cost > env.RRT_EPS:
-            action = env.interpolate(np.array(pos), np.array(next_pos), env.RRT_EPS/edge_cost) - np.array(pos)
+        if edge_cost > env.LOCAL_ENV_SIZE:
+            action = env.interpolate(
+                np.array(pos), np.array(next_pos), env.LOCAL_ENV_SIZE / edge_cost
+            ) - np.array(pos)
             action_t = torch.Tensor(action)
 
         return occ_grid_t, start_t, goal_t, pos_t, action_t, dist_to_g_t
+
 
 def train_init(env, epoch=100):
     global batch_num
@@ -135,7 +145,14 @@ def train_init(env, epoch=100):
     # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=10000, verbose=True, factor=0.5)
 
     dataset = MyDataset(env, data_cnt, None, None)
-    dataloader = DataLoader(dataset, batch_size=bs, shuffle=True, drop_last=True, num_workers=10, pin_memory=True)
+    dataloader = DataLoader(
+        dataset,
+        batch_size=bs,
+        shuffle=True,
+        drop_last=True,
+        num_workers=10,
+        pin_memory=True,
+    )
     for epoch_n in range(epoch):
         for data in dataloader:
             occ_grid, start, goal, pos, action, dist_to_g = data
@@ -176,9 +193,18 @@ def train_init(env, epoch=100):
             # scheduler.step(loss)
 
             if batch_num % 100 == 0:
-                print('Loss after epoch %d, train_iter %d, dataset_sizes %d: , p_loss: %.3f, v_loss: %.3f' % (epoch_n, batch_num, data_cnt, alpha_p * p_loss.item(), alpha_v * v_loss.item()))
-                writer.add_scalar('p_loss/train', alpha_p * p_loss.item(), batch_num)
-                writer.add_scalar('v_loss/train', alpha_v * v_loss.item(), batch_num)
+                print(
+                    "Loss after epoch %d, train_iter %d, dataset_sizes %d: , p_loss: %.3f, v_loss: %.3f"
+                    % (
+                        epoch_n,
+                        batch_num,
+                        data_cnt,
+                        alpha_p * p_loss.item(),
+                        alpha_v * v_loss.item(),
+                    )
+                )
+                writer.add_scalar("p_loss/train", alpha_p * p_loss.item(), batch_num)
+                writer.add_scalar("v_loss/train", alpha_v * v_loss.item(), batch_num)
 
             if loss.item() < best_loss:
                 torch.save(model.net.state_dict(), best_model_path)
@@ -190,12 +216,12 @@ def train_init(env, epoch=100):
         print("saved session to ", model_path)
 
 
-parser = argparse.ArgumentParser(description='Process some integers.')
-parser.add_argument('--name', default='1')
-parser.add_argument('--checkpoint', default='')
+parser = argparse.ArgumentParser(description="Process some integers.")
+parser.add_argument("--name", default="1")
+parser.add_argument("--checkpoint", default="")
 args = parser.parse_args()
 
-writer = SummaryWriter(comment = '_next')
+writer = SummaryWriter(comment="_next")
 
 # Constatns
 data_dir = osp.join(CUR_DIR, "dataset")
@@ -207,10 +233,10 @@ best_model_path = osp.join(CUR_DIR, "models/next_v2_best.pt")
 # Hyperparameters:
 visualize = False
 cuda = True
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 epoch_num = 6000
 train_num = 10
-UCB_type = 'kde'
+UCB_type = "kde"
 robot_dim = 8
 bs = 256
 occ_grid_dim = 100
@@ -221,18 +247,20 @@ alpha_v = 1
 sigma = torch.tensor([0.5, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]).to(device)
 
 env = MyMazeEnv(robot_dim, maze_dir)
-model = Model(env, cuda = cuda, dim = robot_dim, env_width=occ_grid_dim)
+model = Model(env, cuda=cuda, dim=robot_dim, env_width=occ_grid_dim)
 mse_loss = torch.nn.MSELoss()
 
-if args.checkpoint != '':
+if args.checkpoint != "":
     print("Loading checkpoint {}.pt".format(args.checkpoint))
-    model.net.load_state_dict(torch.load(osp.join(CUR_DIR, 'models/{}.pt'.format(args.checkpoint))))
+    model.net.load_state_dict(
+        torch.load(osp.join(CUR_DIR, "models/{}.pt".format(args.checkpoint)))
+    )
 
 start_epoch = 2000
 data_cnt = 100000
 train_data_cnt = data_cnt + train_step_cnt
 batch_num = 0
-best_loss = float('inf')
+best_loss = float("inf")
 success_rate = []
 
 train_init(env)
@@ -363,5 +391,3 @@ train_init(env)
 #             print("saved session to ", model_path)
 
 #         train_data_cnt += train_step_cnt
-
-
