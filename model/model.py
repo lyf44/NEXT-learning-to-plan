@@ -1,7 +1,8 @@
 import os
 import os.path as osp
 import sys
-sys.path.insert(0, osp.join(osp.dirname(osp.abspath(__file__)), '../'))
+
+sys.path.insert(0, osp.join(osp.dirname(osp.abspath(__file__)), "../"))
 
 import numpy as np
 import torch
@@ -11,6 +12,7 @@ import torch.optim as optim
 from torch.distributions.multivariate_normal import MultivariateNormal
 
 from NEXT.utils import load_model
+
 
 class Attention(nn.Module):
     def __init__(self, cuda=True, env_width=15, cap=8, dim=2):
@@ -84,6 +86,7 @@ class Attention(nn.Module):
 
         return x
 
+
 class PPN(nn.Module):
     def __init__(self, cuda, env_width=15, cap=8, dim=2):
         super(PPN, self).__init__()
@@ -102,19 +105,30 @@ class PPN(nn.Module):
         self.w = 13
 
         # self.hidden = nn.Conv2d(in_channels=self.cap + 1, out_channels=self.latent_dim, kernel_size=3, padding=1)
-        self.hidden = nn.Conv2d(in_channels=self.cap + self.map_f_dim, out_channels=self.latent_dim, kernel_size=3, padding=1)
+        self.hidden = nn.Conv2d(
+            in_channels=self.cap + self.map_f_dim,
+            out_channels=self.latent_dim,
+            kernel_size=3,
+            padding=1,
+        )
         self.map_cnn = nn.Sequential(
-            nn.Conv2d(in_channels=1,
-                     out_channels=self.channel_mult*1,
-                     kernel_size=4,
-                     stride=2,
-                     padding=1), # out = (16, 5, 5)
+            nn.Conv2d(
+                in_channels=1,
+                out_channels=self.channel_mult * 1,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+            ),  # out = (16, 5, 5)
             nn.LeakyReLU(),
-            nn.Conv2d(self.channel_mult*1, self.channel_mult*2, 3, 2, 1), # out = (32, 3, 3)
-            nn.BatchNorm2d(self.channel_mult*2),
+            nn.Conv2d(
+                self.channel_mult * 1, self.channel_mult * 2, 3, 2, 1
+            ),  # out = (32, 3, 3)
+            nn.BatchNorm2d(self.channel_mult * 2),
             nn.LeakyReLU(),
-            nn.Conv2d(self.channel_mult*2, self.channel_mult*4, 3, 2, 1), # out = (64, 2, 2)
-            nn.BatchNorm2d(self.channel_mult*4),
+            nn.Conv2d(
+                self.channel_mult * 2, self.channel_mult * 4, 3, 2, 1
+            ),  # out = (64, 2, 2)
+            nn.BatchNorm2d(self.channel_mult * 4),
             nn.LeakyReLU(),
             # nn.Conv2d(self.channel_mult*4, self.channel_mult*8, 4, 2, 1), # out = (128, 1, 1)
             # nn.BatchNorm2d(self.channel_mult*8),
@@ -124,10 +138,25 @@ class PPN(nn.Module):
             # nn.BatchNorm2d(self.channel_mult*16),
             # nn.LeakyReLU(0.2, inplace=True)
         )
-        self.h0 = nn.Conv2d(in_channels=self.latent_dim, out_channels=self.latent_dim, kernel_size=3, padding=1)
-        self.c0 = nn.Conv2d(in_channels=self.latent_dim, out_channels=self.latent_dim, kernel_size=3, padding=1)
+        self.h0 = nn.Conv2d(
+            in_channels=self.latent_dim,
+            out_channels=self.latent_dim,
+            kernel_size=3,
+            padding=1,
+        )
+        self.c0 = nn.Conv2d(
+            in_channels=self.latent_dim,
+            out_channels=self.latent_dim,
+            kernel_size=3,
+            padding=1,
+        )
 
-        self.conv = nn.Conv2d(in_channels=self.latent_dim, out_channels=self.conv_cap, kernel_size=self.conv_kern, padding=self.conv_pad)
+        self.conv = nn.Conv2d(
+            in_channels=self.latent_dim,
+            out_channels=self.conv_cap,
+            kernel_size=self.conv_kern,
+            padding=self.conv_pad,
+        )
         self.lstm = nn.LSTMCell(self.conv_cap, self.latent_dim)
 
         self.attention_g = Attention(cuda, env_width=self.w, cap=cap, dim=dim)
@@ -136,9 +165,9 @@ class PPN(nn.Module):
         self.policy = nn.Sequential(
             nn.Linear(in_features=self.g, out_features=128),
             nn.ReLU(),
-            nn.Linear(in_features=128, out_features=64), # 128 / 64 32/32
+            nn.Linear(in_features=128, out_features=64),  # 128 / 64 32/32
             nn.ReLU(),
-            nn.Linear(in_features=64, out_features=self.dim+1),
+            nn.Linear(in_features=64, out_features=self.dim + 1),
         )
 
     def forward(self, cur_state, goal_state, maze_map):
@@ -149,7 +178,9 @@ class PPN(nn.Module):
 
         b_size = maze_map.shape[0]
 
-        goal_atten = self.attention_g(goal_state) # has size [b_size, capacity, map_w, map_w]
+        goal_atten = self.attention_g(
+            goal_state
+        )  # has size [b_size, capacity, map_w, map_w]
 
         # maze_map = maze_map.view(b_size, 1, self.env_width, self.env_width)
         # x = torch.cat((maze_map, goal_atten), dim=1)
@@ -160,19 +191,33 @@ class PPN(nn.Module):
         x = torch.cat((maze_f, goal_atten), dim=1)
 
         h_layer = self.hidden(x)
-        h0 = self.h0(h_layer).transpose(1, 3).contiguous().view(b_size * self.w**2, self.latent_dim)
-        c0 = self.c0(h_layer).transpose(1, 3).contiguous().view(b_size * self.w**2, self.latent_dim)
+        h0 = (
+            self.h0(h_layer)
+            .transpose(1, 3)
+            .contiguous()
+            .view(b_size * self.w**2, self.latent_dim)
+        )
+        c0 = (
+            self.c0(h_layer)
+            .transpose(1, 3)
+            .contiguous()
+            .view(b_size * self.w**2, self.latent_dim)
+        )
 
         last_h, last_c = h0, c0
         for _ in range(0, self.iters):
             h_map = last_h.view(-1, self.w, self.w, self.latent_dim)
             h_map = h_map.transpose(3, 1)
-            lstm_inp = self.conv(h_map).transpose(1, 3).contiguous().view(-1, self.conv_cap)
+            lstm_inp = (
+                self.conv(h_map).transpose(1, 3).contiguous().view(-1, self.conv_cap)
+            )
             last_h, last_c = self.lstm(lstm_inp, (last_h, last_c))
 
         x = last_h.view(b_size, self.w, self.w, self.latent_dim).transpose(3, 1)
         x = x.view(b_size, self.g, self.cap, self.w, self.w)
-        state_atten = self.attention_s(cur_state).view(b_size, 1, self.cap, self.w, self.w)
+        state_atten = self.attention_s(cur_state).view(
+            b_size, 1, self.cap, self.w, self.w
+        )
         x = x * state_atten
 
         x = x.sum(dim=-1).sum(dim=-1).sum(dim=-1)
@@ -196,7 +241,9 @@ class PPN(nn.Module):
         b_size = maze_map.shape[0]
         # assert b_size == 1
 
-        goal_atten = self.attention_g(goal_state) # has size [b_size, capacity, map_w, map_w]
+        goal_atten = self.attention_g(
+            goal_state
+        )  # has size [b_size, capacity, map_w, map_w]
 
         # maze_map = maze_map.view(b_size, 1, self.env_width, self.env_width)
         # x = torch.cat((maze_map, goal_atten), dim=1)
@@ -205,14 +252,26 @@ class PPN(nn.Module):
         x = torch.cat((maze_f, goal_atten), dim=1)
 
         h_layer = self.hidden(x)
-        h0 = self.h0(h_layer).transpose(1, 3).contiguous().view(b_size * self.w**2, self.latent_dim)
-        c0 = self.c0(h_layer).transpose(1, 3).contiguous().view(b_size * self.w**2, self.latent_dim)
+        h0 = (
+            self.h0(h_layer)
+            .transpose(1, 3)
+            .contiguous()
+            .view(b_size * self.w**2, self.latent_dim)
+        )
+        c0 = (
+            self.c0(h_layer)
+            .transpose(1, 3)
+            .contiguous()
+            .view(b_size * self.w**2, self.latent_dim)
+        )
 
         last_h, last_c = h0, c0
         for _ in range(0, self.iters):
             h_map = last_h.view(-1, self.w, self.w, self.latent_dim)
             h_map = h_map.transpose(3, 1)
-            lstm_inp = self.conv(h_map).transpose(1, 3).contiguous().view(-1, self.conv_cap)
+            lstm_inp = (
+                self.conv(h_map).transpose(1, 3).contiguous().view(-1, self.conv_cap)
+            )
             last_h, last_c = self.lstm(lstm_inp, (last_h, last_c))
 
         x = last_h.view(b_size, self.w, self.w, self.latent_dim).transpose(3, 1)
@@ -241,7 +300,9 @@ class PPN(nn.Module):
         else:
             x = pb_rep.view(b_size, self.g, self.cap, self.w, self.w)
 
-        state_atten = self.attention_s(cur_states).view(b_size, 1, self.cap, self.w, self.w)
+        state_atten = self.attention_s(cur_states).view(
+            b_size, 1, self.cap, self.w, self.w
+        )
         x = x * state_atten
 
         x = x.sum(dim=-1).sum(dim=-1).sum(dim=-1)
@@ -251,9 +312,12 @@ class PPN(nn.Module):
 
 
 class Model:
-    def __init__(self, env, cuda, env_width=15, model_cap=8, dim=2, std=None, UCB_type='kde'):
-        if std is None:
-            std = env.RRT_EPS*0.3
+    def __init__(
+        self, env, cuda, env_width=15, model_cap=8, dim=2, std=None, UCB_type="kde"
+    ):
+        # if std is None:
+        #     std = env.RRT_EPS*0.3
+        std = 0.1
 
         print("initializing model ...")
         self.net = PPN(cuda, env_width=env_width, cap=model_cap, dim=dim)
@@ -262,7 +326,7 @@ class Model:
             self.net = self.net.cuda()
         self.std = std
         self.dim = dim
-        self.var = torch.eye(self.dim)*self.std**2
+        self.var = torch.eye(self.dim) * self.std**2
         # self.var = torch.tensor([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
         # print('dim == ', dim)
         self.env = env
@@ -272,7 +336,7 @@ class Model:
             self.env_low = self.env_low.cuda()
             self.env_high = self.env_high.cuda()
 
-        self.env_width=env_width
+        self.env_width = env_width
         self.UCB_type = UCB_type
 
     def set_problem(self, problem):
@@ -296,7 +360,7 @@ class Model:
 
     def net_forward(self, states, use_np=True):
         if states.ndim == 1:
-            states = states.reshape(1,-1)
+            states = states.reshape(1, -1)
 
         if use_np:
             states = torch.FloatTensor(states)
@@ -307,10 +371,10 @@ class Model:
         y = self.net.state_forward(states, self.pb_rep)
         if use_np:
             y = y.data.cpu().numpy()
-            pred_actions = y[:, :self.dim]
+            pred_actions = y[:, : self.dim]
             pred_values = y[:, -1].reshape(-1, 1)
         else:
-            pred_actions = y[:, :self.dim]
+            pred_actions = y[:, : self.dim]
             pred_values = y[:, -1].view(-1, 1)
 
         if pred_actions.shape[0] == 1:
@@ -346,5 +410,3 @@ class Model:
 
     def set_net(self, net):
         self.net = net
-
-

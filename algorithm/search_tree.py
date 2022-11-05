@@ -1,7 +1,8 @@
 import numpy as np
 
-from .alg_config import RRT_EPS
+# from .alg_config import RRT_EPS
 import torch
+
 
 class SearchTree:
     def __init__(self, env, root, model=None, dim=2):
@@ -10,7 +11,7 @@ class SearchTree:
         self.rewired_parents = [None]
         self.expanded_by_rrt = [None]
         self.freesp = [True]
-        self.costs = [0.]
+        self.costs = [0.0]
         self.path_lengths = [-1]
         self.cumulated_collision_checks = [0]
         self.in_goal_region = [False]
@@ -28,23 +29,35 @@ class SearchTree:
             self.w = [compute_w(env, self, idx=0)]
             self.w_sum = self.w[0]
 
+
 def update_collision_checks(search_tree, collision_checks):
     search_tree.cumulated_collision_checks.append(collision_checks)
 
+
 def rewire_to(search_tree, child_idx, new_parent_idx):
     search_tree.rewired_parents[child_idx] = new_parent_idx
+
 
 def set_cost(search_tree, idx, new_cost):
     search_tree.costs[idx] = new_cost
 
     # Update path length if a path is found.
     if idx == -1 and search_tree.in_goal_region[-1]:
-        if search_tree.path_lengths[-1] < 0 or \
-           search_tree.path_lengths[-1] > new_cost:
+        if search_tree.path_lengths[-1] < 0 or search_tree.path_lengths[-1] > new_cost:
             search_tree.path_lengths[-1] = new_cost
 
-def insert_new_state(env, search_tree, state, model, parent_idx, no_collision, \
-                    done, expanded_by_rrt=False, use_GP=False):
+
+def insert_new_state(
+    env,
+    search_tree,
+    state,
+    model,
+    parent_idx,
+    no_collision,
+    done,
+    expanded_by_rrt=False,
+    use_GP=False,
+):
     search_tree.states = np.append(search_tree.states, [state], axis=0)
     search_tree.parents.append(parent_idx)
     search_tree.rewired_parents.append(parent_idx)
@@ -57,9 +70,10 @@ def insert_new_state(env, search_tree, state, model, parent_idx, no_collision, \
     search_tree.costs.append(-1)
 
     if no_collision and (not done):
-        search_tree.non_terminal_states = np.append( \
-            search_tree.non_terminal_states, [state], axis=0)
-        search_tree.non_terminal_idxes.append(search_tree.states.shape[0]-1)
+        search_tree.non_terminal_states = np.append(
+            search_tree.non_terminal_states, [state], axis=0
+        )
+        search_tree.non_terminal_idxes.append(search_tree.states.shape[0] - 1)
 
     if model is not None:
         state_value = model.pred_value(state)
@@ -76,13 +90,15 @@ def insert_new_state(env, search_tree, state, model, parent_idx, no_collision, \
         search_tree.w.append(w)
         search_tree.w_sum += w
 
-    return search_tree.states.shape[0]-1
+    return search_tree.states.shape[0] - 1
+
 
 def state_kernel(env, state_A, state_B):
-    diff = env.distance(state_A, state_B) / env.RRT_EPS
-    kernel = np.exp( - (diff**2) * 1.)
+    diff = env.distance(state_A, state_B) / env.LOCAL_ENV_SIZE
+    kernel = np.exp(-(diff**2) * 1.0)
 
     return kernel
+
 
 def compute_w(env, search_tree, idx=None, state=None):
     if state is None:
