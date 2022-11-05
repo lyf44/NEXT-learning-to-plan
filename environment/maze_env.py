@@ -245,6 +245,8 @@ class MazeEnv:
             return True
 
 class MyMazeEnv(MazeEnv):
+    RRT_EPS = 2.0
+
     def __init__(self, dim, data_dir):
         print("Initializing environment...")
         self.dim = dim
@@ -253,7 +255,7 @@ class MyMazeEnv(MazeEnv):
         self._maze = Maze2D(gui=False)
 
         maze_dirs = []
-        for path in Path(data_dir).rglob('env.obj'):
+        for path in Path(data_dir).rglob('env_small.obj'):
             maze_dirs.append(path.parent)
         self.maps = maze_dirs
 
@@ -271,6 +273,9 @@ class MyMazeEnv(MazeEnv):
         # self.width = self.maps.shape[1]
         self.order = list(range(self.size))
         self.episode_i = 0
+
+        self.low = [0, 0, math.radians(-180), -math.radians(-180), -math.radians(-180), math.radians(-180), math.radians(-180), math.radians(-180)]
+        self.high = [10, 10, math.radians(180), -math.radians(180), -math.radians(180), math.radians(180), math.radians(180), math.radians(180)]
 
     def init_new_problem(self, index=None):
         '''
@@ -290,10 +295,9 @@ class MyMazeEnv(MazeEnv):
         self._maze.load_mesh(mesh)
         self._maze.load_occupancy_grid(occ_grid)
 
-        occ_grid_gt = np.loadtxt(osp.join(maze_dir, "occ_grid_small.txt")).astype(np.uint8)
-        base_x_bounds = [0, occ_grid_gt.shape[0]]
-        base_y_bounds = [0, occ_grid_gt.shape[1]]
-        print(occ_grid_gt.shape)
+        base_x_bounds = [0, occ_grid.shape[0]]
+        base_y_bounds = [0, occ_grid.shape[1]]
+        print(occ_grid.shape)
         self._maze.robot.set_base_bounds(base_x_bounds, base_y_bounds)
 
         start, goal, expert_path = self.sample_problems(G)
@@ -306,7 +310,7 @@ class MyMazeEnv(MazeEnv):
         #     assert utils.is_edge_free(self._maze, v1, v2)
 
         self.map = occ_grid
-        self.map_orig = occ_grid_gt
+        self.map_orig = occ_grid
         self.init_state = start
         self.goal_state = goal
         self.episode_i += 1
@@ -319,8 +323,8 @@ class MyMazeEnv(MazeEnv):
 
         self.collision_check_count = 0
 
-        self.low = self._maze.robot.get_joint_lower_bounds()
-        self.high = self._maze.robot.get_joint_higher_bounds()
+        # self.low = self._maze.robot.get_joint_lower_bounds()
+        # self.high = self._maze.robot.get_joint_higher_bounds()
 
         return self.get_problem()
 
@@ -338,39 +342,25 @@ class MyMazeEnv(MazeEnv):
         '''
         Distance metric
         '''
+        to_state = np.maximum(to_state, np.array(self.low))
+        to_state = np.minimum(to_state, np.array(self.high))
         diff = np.abs(to_state - from_state)
-        if diff.ndim == 1:
-            diff = diff.reshape(1, -1)
-
-        # Disable wrap around just to make things easy
-        # if self.dim >= 3:
-        #     diff[:,2] = np.min((diff[:,2], np.abs(diff[:,2] - 2*LIMITS[2])), axis=0)
-        #     assert (np.abs(diff[:,2]) <= LIMITS[2]).all()
-
         return np.sqrt(np.sum(diff**2, axis=-1))
 
     def interpolate(self, from_state, to_state, ratio):
         diff = to_state - from_state
-
-        # if self.dim >= 3:
-        #     if np.abs(diff[2]) > LIMITS[2]:
-        #         if diff[2] > 0:
-        #             diff[2] -= 2*LIMITS[2]
-        #         else:
-        #             diff[2] += 2*LIMITS[2]
-        #     assert np.abs(diff[2]) <= LIMITS[2]
-
         new_state = from_state + diff * ratio
 
-        # if self.dim >= 3:
-        #     if np.abs(new_state[2]) > LIMITS[2]:
-        #         if new_state[2] > 0:
-        #             new_state[2] -= 2*LIMITS[2]
-        #         else:
-        #             new_state[2] += 2*LIMITS[2]
-        #     assert np.abs(new_state[2]) <= LIMITS[2]
-
+        new_state = np.maximum(new_state, np.array(self.low))
+        new_state = np.minimum(new_state, np.array(self.high))
         return new_state
+
+    def in_goal_region(self, state):
+        '''
+        Return whether a state(configuration) is in the goal region
+        '''
+        return self.distance(state, self.goal_state) < 0.1 and \
+            self._state_fp(state)
 
     def step(self, state, action=None, new_state=None, check_collision=True):
         '''
@@ -380,13 +370,8 @@ class MyMazeEnv(MazeEnv):
         if action is not None:
             new_state = state + action
 
-        # if self.dim >= 3:
-        #     if np.abs(new_state[2]) > LIMITS[2]:
-        #         if new_state[2] > 0:
-        #             new_state[2] -= 2*LIMITS[2]
-        #         else:
-        #             new_state[2] += 2*LIMITS[2]
-        #     assert np.abs(new_state[2]) <= LIMITS[2]
+        new_state = np.maximum(new_state, np.array(self.low))
+        new_state = np.minimum(new_state, np.array(self.high))
 
         action = new_state - state
 
@@ -394,19 +379,26 @@ class MyMazeEnv(MazeEnv):
             return new_state, action
 
         done = False
-        # no_collision = self._edge_fp(state, new_state)
-        res_new_state = np.array(utils.rrt_extend(self._maze, state, new_state))
-        # print("env.step", state, new_state, res_new_state)
-        if not np.allclose(res_new_state, state):
-            no_collision = True
-            action = new_state - state
-        else:
-            no_collision = False
-
-        if no_collision and self.in_goal_region(res_new_state):
+        no_collision = self._edge_fp(state, new_state)
+        if no_collision and self.in_goal_region(new_state):
             done = True
 
-        return res_new_state, action, no_collision, done
+        return new_state, action, no_collision, done
+
+        # RRT style extension
+        # done = False
+        # # no_collision = self._edge_fp(state, new_state)
+        # res_new_state = np.array(utils.rrt_extend(self._maze, state, new_state))
+        # # print("env.step", state, new_state, res_new_state)
+        # if not np.allclose(res_new_state, state):
+        #     no_collision = True
+        #     action = new_state - state
+        # else:
+        #     no_collision = False
+        # if no_collision and self.in_goal_region(res_new_state):
+        #     done = True
+
+        # return res_new_state, action, no_collision, done
 
     def _edge_fp(self, state, new_state):
         return utils.is_edge_free(self._maze, state, new_state)

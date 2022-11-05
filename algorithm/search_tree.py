@@ -36,7 +36,7 @@ def rewire_to(search_tree, child_idx, new_parent_idx):
 
 def set_cost(search_tree, idx, new_cost):
     search_tree.costs[idx] = new_cost
-    
+
     # Update path length if a path is found.
     if idx == -1 and search_tree.in_goal_region[-1]:
         if search_tree.path_lengths[-1] < 0 or \
@@ -55,7 +55,7 @@ def insert_new_state(env, search_tree, state, model, parent_idx, no_collision, \
     # Will be updated in post-processing.
     search_tree.path_lengths.append(search_tree.path_lengths[-1])
     search_tree.costs.append(-1)
-    
+
     if no_collision and (not done):
         search_tree.non_terminal_states = np.append( \
             search_tree.non_terminal_states, [state], axis=0)
@@ -79,7 +79,7 @@ def insert_new_state(env, search_tree, state, model, parent_idx, no_collision, \
     return search_tree.states.shape[0]-1
 
 def state_kernel(env, state_A, state_B):
-    diff = env.distance(state_A, state_B) / RRT_EPS
+    diff = env.distance(state_A, state_B) / env.RRT_EPS
     kernel = np.exp( - (diff**2) * 1.)
 
     return kernel

@@ -10,8 +10,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions.multivariate_normal import MultivariateNormal
 
-from NEXT.algorithm import RRT_EPS
-from NEXT.environment import LIMITS
 from NEXT.utils import load_model
 
 class Attention(nn.Module):
@@ -90,10 +88,8 @@ class PPN(nn.Module):
     def __init__(self, cuda, env_width=15, cap=8, dim=2):
         super(PPN, self).__init__()
         self.env_width = env_width
-        self.w = 13
         self.cap = cap
         self.dim = dim
-
         self.g = 8
         self.latent_dim = self.cap * self.g
         self.iters = 20
@@ -101,8 +97,11 @@ class PPN(nn.Module):
         self.conv_pad = int((self.conv_kern - 1.0) / 2)
         self.conv_cap = self.cap * 8
         self.channel_mult = 16
-        self.map_f_dim = 64
 
+        self.map_f_dim = 64
+        self.w = 13
+
+        # self.hidden = nn.Conv2d(in_channels=self.cap + 1, out_channels=self.latent_dim, kernel_size=3, padding=1)
         self.hidden = nn.Conv2d(in_channels=self.cap + self.map_f_dim, out_channels=self.latent_dim, kernel_size=3, padding=1)
         self.map_cnn = nn.Sequential(
             nn.Conv2d(in_channels=1,
@@ -151,12 +150,13 @@ class PPN(nn.Module):
         b_size = maze_map.shape[0]
 
         goal_atten = self.attention_g(goal_state) # has size [b_size, capacity, map_w, map_w]
-        # maze_map = maze_map.view(b_size, 1, self.w, self.w)
+
+        # maze_map = maze_map.view(b_size, 1, self.env_width, self.env_width)
         # x = torch.cat((maze_map, goal_atten), dim=1)
 
         maze_map = maze_map.view(b_size, 1, self.env_width, self.env_width)
         maze_f = self.map_cnn(maze_map)
-        print(maze_f.shape) # [1, 64, 42, 42]
+        # print(maze_f.shape) # [1, 64, 42, 42]
         x = torch.cat((maze_f, goal_atten), dim=1)
 
         h_layer = self.hidden(x)
@@ -197,11 +197,11 @@ class PPN(nn.Module):
         # assert b_size == 1
 
         goal_atten = self.attention_g(goal_state) # has size [b_size, capacity, map_w, map_w]
-        maze_map = maze_map.view(b_size, 1, self.env_width, self.env_width)
-        # x = torch.cat((maze_map, goal_atten), dim=1)
 
+        # maze_map = maze_map.view(b_size, 1, self.env_width, self.env_width)
+        # x = torch.cat((maze_map, goal_atten), dim=1)
         maze_f = self.map_cnn(maze_map)
-        print(maze_f.shape) # [bs, 64, 13, 13]
+        # print(maze_f.shape) # [bs, 64, 13, 13]
         x = torch.cat((maze_f, goal_atten), dim=1)
 
         h_layer = self.hidden(x)
@@ -251,9 +251,9 @@ class PPN(nn.Module):
 
 
 class Model:
-    def __init__(self, cuda, env_width=15, model_cap=8, dim=2, std=None, UCB_type='kde'):
+    def __init__(self, env, cuda, env_width=15, model_cap=8, dim=2, std=None, UCB_type='kde'):
         if std is None:
-            std = RRT_EPS*0.3
+            std = env.RRT_EPS*0.3
 
         print("initializing model ...")
         self.net = PPN(cuda, env_width=env_width, cap=model_cap, dim=dim)
@@ -262,9 +262,15 @@ class Model:
             self.net = self.net.cuda()
         self.std = std
         self.dim = dim
-        # self.var = torch.eye(self.dim)*self.std**2
-        self.var = torch.tensor([0.5, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
-        print('dim == ', dim)
+        self.var = torch.eye(self.dim)*self.std**2
+        # self.var = torch.tensor([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+        # print('dim == ', dim)
+        self.env = env
+        self.env_low = torch.tensor(self.env.low)
+        self.env_high = torch.tensor(self.env.high)
+        if self.cuda:
+            self.env_low = self.env_low.cuda()
+            self.env_high = self.env_high.cuda()
 
         self.env_width=env_width
         self.UCB_type = UCB_type
@@ -285,21 +291,27 @@ class Model:
         self.pb_forward(self.goal_state, self.maze_map)
 
     def pb_forward(self, goal_state, maze_map):
+        # goal_state = (goal_state - self.env_low) / (self.env_high - self.env_low)
         self.pb_rep = self.net.pb_forward(goal_state, maze_map)
 
-    def net_forward(self, states):
+    def net_forward(self, states, use_np=True):
         if states.ndim == 1:
             states = states.reshape(1,-1)
 
-        cur_states = torch.FloatTensor(states)
-        if self.cuda:
-            cur_states = cur_states.cuda()
+        if use_np:
+            states = torch.FloatTensor(states)
+            if self.cuda:
+                states = states.cuda()
 
-        y = self.net.state_forward(cur_states, self.pb_rep)
-        y = y.data.cpu().numpy()
-
-        pred_actions = y[:, :self.dim]
-        pred_values = y[:, -1]
+        # states = (states - self.env_low.unsqueeze(0)) / (self.env_high.unsqueeze(0) - self.env_low.unsqueeze(0))
+        y = self.net.state_forward(states, self.pb_rep)
+        if use_np:
+            y = y.data.cpu().numpy()
+            pred_actions = y[:, :self.dim]
+            pred_values = y[:, -1].reshape(-1, 1)
+        else:
+            pred_actions = y[:, :self.dim]
+            pred_values = y[:, -1].view(-1, 1)
 
         if pred_actions.shape[0] == 1:
             pred_actions = pred_actions[0]
@@ -314,7 +326,8 @@ class Model:
 
     def policy(self, state, k=1):
         action_mean, _ = self.net_forward(state)
-        m = MultivariateNormal(torch.FloatTensor(action_mean), torch.diag(self.var))
+        # m = MultivariateNormal(torch.FloatTensor(action_mean), torch.diag(self.var))
+        m = MultivariateNormal(torch.FloatTensor(action_mean), self.var)
 
         actions = []
         prior_values = []
