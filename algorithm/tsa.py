@@ -21,8 +21,7 @@ from .search_tree import (
 import utils
 
 CUR_DIR = osp.dirname(osp.abspath(__file__))
-VISUALIZE = True
-
+VISUALIZE = False
 
 def RRTS_plan(env, T=100, stop_when_success=False):
     return NEXT_plan(
@@ -208,7 +207,7 @@ def select(search_tree, env, c=1.0, use_GP=False):
     for i in range(search_tree.non_terminal_states.shape[0]):
         idx = search_tree.non_terminal_idxes[i]
         Q = search_tree.state_values[idx]
-        print(search_tree.w_sum, search_tree.w[idx], idx)
+        # print(Q, idx)
         U = np.sqrt(np.log(search_tree.w_sum) / search_tree.w[idx])
 
         scores.append(Q + c * U)
@@ -263,7 +262,7 @@ def expand(search_tree, idx, model, env, k=10, c=1.0, extend_cnt=0, use_GP=False
     target_state = new_state
 
     if VISUALIZE:
-        print(state, action)
+        print(state, action, search_tree.state_values[idx], Qs[np.argmax(scores)])
         utils.visualize_nodes_global(
             env.map,
             [new_state],

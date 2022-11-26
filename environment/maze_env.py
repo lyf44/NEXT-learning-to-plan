@@ -255,7 +255,7 @@ class MyMazeEnv(MazeEnv):
     RRT_EPS = 2.0
     LOCAL_ENV_SIZE = 2.0
 
-    def __init__(self, dim, data_dir):
+    def __init__(self, dim, data_dir, test=False):
         print("Initializing environment...")
         self.dim = dim
         self.collision_check_count = 0
@@ -265,7 +265,12 @@ class MyMazeEnv(MazeEnv):
         maze_dirs = []
         for path in Path(data_dir).rglob("env_small.obj"):
             maze_dirs.append(path.parent)
-        self.maps = maze_dirs
+        if not test:
+            self.maps = maze_dirs
+        else:
+            self.maps = []
+            for i in range(len(maze_dirs)):
+                self.maps.append(osp.join(data_dir, "{}".format(i)))
 
         # load map from file
         # map_file = 'maze_files/mazes_15_%d_3000.npz' % dim
@@ -303,7 +308,7 @@ class MyMazeEnv(MazeEnv):
             math.radians(180),
         ]
 
-    def init_new_problem(self, index=None):
+    def init_new_problem(self, index=None, use_start_goal=False):
         """
         Initialize a new planning problem
         """
@@ -311,10 +316,9 @@ class MyMazeEnv(MazeEnv):
             index = self.episode_i
 
         maze_dir = self.maps[self.order[index]]
-        print("Init new problems on ", maze_dir)
+        print("Init new problems on ", maze_dir, index, self.order)
 
         occ_grid = np.loadtxt(osp.join(maze_dir, "occ_grid_small.txt")).astype(np.uint8)
-        G = nx.read_graphml(osp.join(maze_dir, "dense_g_small.graphml"))
         mesh = osp.join(maze_dir, "env_small.obj")
 
         self._maze.clear_obstacles()
@@ -326,7 +330,13 @@ class MyMazeEnv(MazeEnv):
         print(occ_grid.shape)
         self._maze.robot.set_base_bounds(base_x_bounds, base_y_bounds)
 
-        start, goal, expert_path = self.sample_problems(G)
+        if not use_start_goal:
+            G = nx.read_graphml(osp.join(maze_dir, "dense_g_small.graphml"))
+            start, goal, expert_path = self.sample_problems(G)
+        else:
+            with open(osp.join(maze_dir, "start_goal.json")) as f:
+                start, goal = json.load(f)
+                expert_path = None
 
         # expert_path_2 = utils.interpolate(expert_path)
         # utils.visualize_nodes_global(occ_grid_gt, expert_path_2, start, goal, show=False, save=True, file_name="viz.png")
@@ -337,8 +347,8 @@ class MyMazeEnv(MazeEnv):
 
         self.map = occ_grid
         self.map_orig = occ_grid
-        self.init_state = start
-        self.goal_state = goal
+        self.init_state = np.array(start)
+        self.goal_state = np.array(goal)
         self.episode_i += 1
 
         self.expert_path = expert_path

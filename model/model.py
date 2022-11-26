@@ -356,6 +356,7 @@ class Model:
 
     def pb_forward(self, goal_state, maze_map):
         # goal_state = (goal_state - self.env_low) / (self.env_high - self.env_low)
+        goal_state = self.normalize_state(goal_state)
         self.pb_rep = self.net.pb_forward(goal_state, maze_map)
 
     def net_forward(self, states, use_np=True):
@@ -368,6 +369,7 @@ class Model:
                 states = states.cuda()
 
         # states = (states - self.env_low.unsqueeze(0)) / (self.env_high.unsqueeze(0) - self.env_low.unsqueeze(0))
+        states = self.normalize_state(states)
         y = self.net.state_forward(states, self.pb_rep)
         if use_np:
             y = y.data.cpu().numpy()
@@ -410,3 +412,10 @@ class Model:
 
     def set_net(self, net):
         self.net = net
+
+    def normalize_state(self, states):
+        states = states.view(-1, self.dim)
+        states[:, 0] -= 5
+        states[:, 1] -= 5
+
+        return states
