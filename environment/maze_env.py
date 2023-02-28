@@ -9,7 +9,7 @@ import math
 from NEXT.algorithm import RRT_EPS
 from .env_config import LIMITS, STICK_LENGTH
 
-from env.maze_2d import Maze2D
+from env.maze import Maze
 import utils
 
 CUR_DIR = osp.dirname(osp.abspath(__file__))
@@ -260,7 +260,7 @@ class MyMazeEnv(MazeEnv):
         self.dim = dim
         self.collision_check_count = 0
 
-        self._maze = Maze2D(gui=False)
+        self._maze = Maze(gui=False)
 
         maze_dirs = []
         for path in Path(data_dir).rglob("env_small.obj"):
