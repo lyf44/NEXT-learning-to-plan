@@ -74,6 +74,7 @@ def NEXT_plan(
 
         # Guided selection and expansion.
         else:
+            # Select which node to expand
             idx = select(search_tree, env)
             assert search_tree.freesp[idx]
             # assert not search_tree.in_goal_region[idx]

@@ -1,7 +1,6 @@
 import os
 import os.path as osp
 import sys
-
 sys.path.insert(0, osp.join(osp.dirname(osp.abspath(__file__)), "../"))
 
 import torch
@@ -109,7 +108,6 @@ class MyDataset(Dataset):
 
         occ_grid, start, goal, pos, next_pos, dist_to_g = data
 
-        dist_to_g /= 20
         # pos[0] -= 5
         # pos[1] -= 5
         # next_pos[0] -= 5
@@ -138,12 +136,14 @@ class MyDataset(Dataset):
 
 
 def train_init(env, epoch=50):
+    print("Training init on offline collected path dataset")
     global batch_num
     model.net.train()
     # Define the loss function and optimizer
     optimizer = torch.optim.Adam(model.net.parameters(), lr=lr, weight_decay=0.00005)
     # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=10000, verbose=True, factor=0.5)
 
+    best_loss = float("inf")
     dataset = MyDataset(env, data_cnt, None, None)
     dataloader = DataLoader(
         dataset,
@@ -208,7 +208,7 @@ def train_init(env, epoch=50):
 
             if loss.item() < best_loss:
                 torch.save(model.net.state_dict(), best_model_path)
-                # print("saved session to ", best_model_path)
+                best_loss = loss.item()
 
             batch_num += 1
 
@@ -224,7 +224,7 @@ args = parser.parse_args()
 writer = SummaryWriter(comment="_next")
 
 # Constatns
-data_dir = osp.join(CUR_DIR, "dataset")
+data_dir = osp.join(CUR_DIR, "dataset/train")
 maze_dir = osp.join(CUR_DIR, "../dataset/gibson/train")
 
 model_path = osp.join(CUR_DIR, "models/next_v2.pt")
@@ -234,7 +234,7 @@ best_model_path = osp.join(CUR_DIR, "models/next_v2_best.pt")
 visualize = False
 cuda = True
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-epoch_num = 6000
+epoch_num = 9000
 train_num = 10
 UCB_type = "kde"
 robot_dim = 8
@@ -244,7 +244,7 @@ train_step_cnt = 2000
 lr = 0.001
 alpha_p = 1
 alpha_v = 1
-sigma = torch.tensor([0.5, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]).to(device)
+sigma = torch.tensor([0.25, 0.25, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]).to(device)
 
 env = MyMazeEnv(robot_dim, maze_dir)
 model = Model(env, cuda=cuda, dim=robot_dim, env_width=occ_grid_dim)
@@ -256,8 +256,8 @@ if args.checkpoint != "":
         torch.load(osp.join(CUR_DIR, "models/{}.pt".format(args.checkpoint)))
     )
 
-start_epoch = 2000
-data_cnt = 32500
+start_epoch = 0
+data_cnt = 57010
 train_data_cnt = data_cnt + train_step_cnt
 batch_num = 0
 best_loss = float("inf")
@@ -270,13 +270,15 @@ for epoch in range(start_epoch, epoch_num):
     problem = env.init_new_problem()
     model.set_problem(problem)
 
-    if epoch < 2000:
-        g_explore_eps = 1.0
-    elif epoch < 4000:
-        g_explore_eps = 0.5 - 0.4 * (epoch - 2000) / 2000
-        # g_explore_eps *= 0.7
-    else:
-        g_explore_eps = 0.1
+    g_explore_eps = 1 - ((epoch // 1000) + 1) / 10.0
+
+    # if epoch < 2000:
+    #     g_explore_eps = 1.0
+    # elif epoch < 4000:
+    #     g_explore_eps = 0.5 - 0.4 * (epoch - 2000) / 2000
+    #     # g_explore_eps *= 0.7
+    # else:
+    #     g_explore_eps = 0.1
 
     # Get path
     print("Planning... with explore_eps: {}".format(g_explore_eps))
@@ -285,7 +287,7 @@ for epoch in range(start_epoch, epoch_num):
     search_tree, done = NEXT_plan(
         env = env,
         model = model,
-        T = 1000,
+        T = 500,
         g_explore_eps = g_explore_eps,
         stop_when_success = True,
         UCB_type = UCB_type
@@ -386,6 +388,7 @@ for epoch in range(start_epoch, epoch_num):
                 if loss.item() < best_loss:
                     torch.save(model.net.state_dict(), best_model_path)
                     print("saved session to ", best_model_path)
+                    best_loss = loss.item()
 
             torch.save(model.net.state_dict(), model_path)
             print("saved session to ", model_path)

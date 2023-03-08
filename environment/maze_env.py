@@ -467,11 +467,7 @@ class MyMazeEnv(MazeEnv):
             #     x[0] += 2
             #     x[1] += 2
 
-            if (
-                len(p) > 2
-                and math.fabs(goal_pos[0] - start_pos[0]) > 2
-                and math.fabs(goal_pos[1] - start_pos[1]) > 2
-            ):
+            if len(path) > 4 or utils.cal_path_len_base(p) > 5:
                 break
 
             i += 1
