@@ -170,6 +170,18 @@ class PPN(nn.Module):
             nn.Linear(in_features=64, out_features=self.dim + 1),
         )
 
+        # self.policy = nn.Sequential(
+        #     nn.Linear(in_features=self.g, out_features=1024),
+        #     nn.ReLU(),
+        #     nn.Linear(in_features=1024, out_features=1024),  # 128 / 64 32/32
+        #     nn.ReLU(),
+        #     nn.Linear(in_features=1024, out_features=1024),  # 128 / 64 32/32
+        #     nn.ReLU(),
+        #     nn.Linear(in_features=1024, out_features=256),  # 128 / 64 32/32
+        #     nn.ReLU(),
+        #     nn.Linear(in_features=256, out_features=self.dim + 1),
+        # )
+
     def forward(self, cur_state, goal_state, maze_map):
         cur_state = cur_state.clone().detach()
         goal_state = goal_state.clone().detach()

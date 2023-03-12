@@ -227,8 +227,8 @@ writer = SummaryWriter(comment="_next")
 data_dir = osp.join(CUR_DIR, "dataset/train")
 maze_dir = osp.join(CUR_DIR, "../dataset/gibson/train")
 
-model_path = osp.join(CUR_DIR, "models/next_v2.pt")
-best_model_path = osp.join(CUR_DIR, "models/next_v2_best.pt")
+model_path = osp.join(CUR_DIR, "models/next_v3.pt")
+best_model_path = osp.join(CUR_DIR, "models/next_v3_best.pt")
 
 # Hyperparameters:
 visualize = False
@@ -243,7 +243,7 @@ occ_grid_dim = 100
 train_step_cnt = 2000
 lr = 0.001
 alpha_p = 1
-alpha_v = 1
+alpha_v = 1 / 10
 sigma = torch.tensor([0.25, 0.25, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]).to(device)
 
 env = MyMazeEnv(robot_dim, maze_dir)
