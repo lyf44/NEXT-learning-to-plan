@@ -15,6 +15,8 @@ class SearchTree:
         self.path_lengths = [-1]
         self.cumulated_collision_checks = [0]
         self.in_goal_region = [False]
+        self.done=False
+        self.goal_idx=-1
 
         # for global exploration
         self.non_terminal_states = np.array([root])
@@ -64,6 +66,9 @@ def insert_new_state(
     search_tree.expanded_by_rrt.append(expanded_by_rrt)
     search_tree.freesp.append(no_collision)
     search_tree.in_goal_region.append(done)
+    if done:
+        search_tree.done = done
+        search_tree.goal_idx = search_tree.states.shape[0] - 1
 
     # Will be updated in post-processing.
     search_tree.path_lengths.append(search_tree.path_lengths[-1])

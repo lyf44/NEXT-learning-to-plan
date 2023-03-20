@@ -316,7 +316,7 @@ class MyMazeEnv(MazeEnv):
             index = self.episode_i
 
         maze_dir = self.maps[self.order[index]]
-        print("Init new problems on ", maze_dir, index, self.order)
+        print("Init new problems on ", maze_dir, index)
 
         occ_grid = np.loadtxt(osp.join(maze_dir, "occ_grid_small.txt")).astype(np.uint8)
         mesh = osp.join(maze_dir, "env_small.obj")
