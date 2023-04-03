@@ -52,12 +52,12 @@ def solve_step_time(env, model, max_time, step_size):
     search_tree = SearchTree(env=env, root=env.init_state, model=model, dim=env.dim)
 
     res = []
-    i = 0
-    for _ in range(step_size, max_time + 1, step_size):
+    t = step_size
+    while t < max_time + 1e-4:
         search_tree, success = NEXT_plan(env, model, max_allowed_time=step_size, search_tree=search_tree)
         path = extract_path(search_tree)
         res.append((success, path))
-        i += 1
+        t += step_size
     return res
 
 parser = argparse.ArgumentParser(description="Process some integers.")
@@ -69,12 +69,12 @@ args = parser.parse_args()
 maze_dir = osp.join(CUR_DIR, "../dataset/test_env")
 model_path = osp.join(CUR_DIR, "models/next_v3.pt")
 # best_model_path = osp.join(CUR_DIR, "models/next_v2_best.pt")
-res_dir = osp.join(CUR_DIR, "../planner/eval_res/test_ext/{}".format(args.name))
+res_dir = osp.join(CUR_DIR, "../planner/eval_res/test_time/{}".format(args.name))
 if not osp.exists(res_dir):
     os.makedirs(res_dir)
 
-max_extension = 300
-ext_step_size = 25
+max_time = 3
+time_step_size = 0.2
 
 # Hyperparameters:
 visualize = False
@@ -102,7 +102,7 @@ if args.checkpoint != "":
 batch_num = 0
 best_loss = float("inf")
 success_rate = 0
-success_list = [0] * (max_extension // ext_step_size)
+success_list = [0] * 16
 
 test_num = 250
 for env_idx in range(test_num):
@@ -120,7 +120,7 @@ for env_idx in range(test_num):
     print("Planning... with explore_eps: {}".format(g_explore_eps))
     path = None
 
-    res = solve_step_extension(env, model, max_extension, ext_step_size)
+    res = solve_step_time(env, model, max_time, time_step_size)
     success_res = [tmp[0] for tmp in res]
     path_list = [tmp[1] for tmp in res]
     for p in path_list:
