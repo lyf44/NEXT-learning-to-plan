@@ -101,75 +101,78 @@ if args.checkpoint != "":
 
 batch_num = 0
 best_loss = float("inf")
-success_rate = 0
-success_list = [0] * (max_extension // ext_step_size)
+
+
 
 test_num = 250
-for env_idx in range(test_num):
-    p_res_dir = osp.join(res_dir, "{}".format(env_idx))
-    if not osp.exists(p_res_dir):
-        os.mkdir(p_res_dir)
+for repeat in range(10):
+    success_rate = 0
+    success_list = [0] * (max_extension // ext_step_size)
+    for env_idx in range(test_num):
+        p_res_dir = osp.join(res_dir, "{}".format(env_idx))
+        if not osp.exists(p_res_dir):
+            os.mkdir(p_res_dir)
 
-    model.net.eval()
-    problem = env.init_new_problem(use_start_goal=True)
-    model.set_problem(problem)
+        model.net.eval()
+        problem = env.init_new_problem(use_start_goal=True)
+        model.set_problem(problem)
 
-    g_explore_eps = 0.1
+        g_explore_eps = 0.1
 
-    # Get path
-    print("Planning... with explore_eps: {}".format(g_explore_eps))
-    path = None
+        # Get path
+        print("Planning... with explore_eps: {}".format(g_explore_eps))
+        path = None
 
-    res = solve_step_extension(env, model, max_extension, ext_step_size)
-    success_res = [tmp[0] for tmp in res]
-    path_list = [tmp[1] for tmp in res]
-    for p in path_list:
-        if len(p) > 0:
-            # path = utils.interpolate(p)
-            # utils.visualize_nodes_global(mesh_path, occ_grid, path, maze.start, maze.goal, show=False, save=True, file_name=osp.join(learnt_log_dir, "planned_path.png"))
-            with open(osp.join(p_res_dir, 'planned_path.json'), 'w') as f:
-                json.dump(p, f)
-            break
+        res = solve_step_extension(env, model, max_extension, ext_step_size)
+        success_res = [tmp[0] for tmp in res]
+        path_list = [tmp[1] for tmp in res]
+        for p in path_list:
+            if len(p) > 0:
+                # path = utils.interpolate(p)
+                # utils.visualize_nodes_global(mesh_path, occ_grid, path, maze.start, maze.goal, show=False, save=True, file_name=osp.join(learnt_log_dir, "planned_path.png"))
+                with open(osp.join(p_res_dir, 'planned_path.json'), 'w') as f:
+                    json.dump(p, f)
+                break
 
-    for idx, res in enumerate(success_res):
-        if res:
-            success_list[idx] += 1
+        for idx, res in enumerate(success_res):
+            if res:
+                success_list[idx] += 1
 
-    # search_tree, done = NEXT_plan(
-    #     env=env,
-    #     model=model,
-    #     T=300,
-    #     g_explore_eps=g_explore_eps,
-    #     stop_when_success=True,
-    #     UCB_type=UCB_type,
-    # )
-    # if done:
-    #     success_rate += 1
-    #     path = extract_path(search_tree)
+        # search_tree, done = NEXT_plan(
+        #     env=env,
+        #     model=model,
+        #     T=300,
+        #     g_explore_eps=g_explore_eps,
+        #     stop_when_success=True,
+        #     UCB_type=UCB_type,
+        # )
+        # if done:
+        #     success_rate += 1
+        #     path = extract_path(search_tree)
 
-    # if path is not None:
-    #     print("Get path, saving to data")
-    #     print(path[0], env.init_state, path[-1], env.goal_state)
-    #     # assert np.allclose(np.array(path[0]), np.array(env.init_state))
-    #     # assert np.allclose(np.array(path[-1]), np.array(env.goal_state))
-    #     with open('planned_path.json', 'w') as f:
-    #         json.dump(path, f)
-    #     # path_tmp = utils.interpolate(path)
-    #     # utils.visualize_nodes_global(
-    #     #     env.map,
-    #     #     path_tmp,
-    #     #     env.init_state,
-    #     #     env.goal_state,
-    #     #     show=False,
-    #     #     save=True,
-    #     #     file_name=osp.join(p_res_dir, "next_path.png")
-    #     # )
+        # if path is not None:
+        #     print("Get path, saving to data")
+        #     print(path[0], env.init_state, path[-1], env.goal_state)
+        #     # assert np.allclose(np.array(path[0]), np.array(env.init_state))
+        #     # assert np.allclose(np.array(path[-1]), np.array(env.goal_state))
+        #     with open('planned_path.json', 'w') as f:
+        #         json.dump(path, f)
+        #     # path_tmp = utils.interpolate(path)
+        #     # utils.visualize_nodes_global(
+        #     #     env.map,
+        #     #     path_tmp,
+        #     #     env.init_state,
+        #     #     env.goal_state,
+        #     #     show=False,
+        #     #     save=True,
+        #     #     file_name=osp.join(p_res_dir, "next_path.png")
+        #     # )
 
-print(success_list)
+    print(success_list)
 
-res = {
-    "success_list": success_list,
-}
+    res = {
+        "success_list": success_list,
+    }
 
-with open(osp.join(res_dir, "result.json"), "w") as f:
-    json.dump(res, f)
+    with open(osp.join(res_dir, "result_{}.json".format(repeat)), "w") as f:
+        json.dump(res, f)
