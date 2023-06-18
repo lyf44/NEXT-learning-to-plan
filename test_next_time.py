@@ -101,11 +101,11 @@ if args.checkpoint != "":
 
 batch_num = 0
 best_loss = float("inf")
-success_rate = 0
-success_list = [0] * 16
 
 test_num = 250
 for repeat in range(10):
+    success_rate = 0
+    success_list = [0] * 15
     for env_idx in range(test_num):
         p_res_dir = osp.join(res_dir, "{}".format(env_idx))
         if not osp.exists(p_res_dir):

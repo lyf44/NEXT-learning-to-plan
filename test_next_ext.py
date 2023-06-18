@@ -102,8 +102,6 @@ if args.checkpoint != "":
 batch_num = 0
 best_loss = float("inf")
 
-
-
 test_num = 250
 for repeat in range(10):
     success_rate = 0
