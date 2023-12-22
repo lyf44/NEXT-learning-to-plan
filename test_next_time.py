@@ -21,6 +21,8 @@ CUR_DIR = osp.dirname(osp.abspath(__file__))
 
 def extract_path(search_tree):
     goal_id = search_tree.goal_idx
+    if goal_id == -1:
+        return []
 
     path = [search_tree.states[goal_id].tolist()]
     id = goal_id
@@ -73,7 +75,7 @@ res_dir = osp.join(CUR_DIR, "../planner/eval_res/test_time/{}".format(args.name)
 if not osp.exists(res_dir):
     os.makedirs(res_dir)
 
-max_time = 3
+max_time = 10
 time_step_size = 0.2
 
 # Hyperparameters:
@@ -105,7 +107,7 @@ best_loss = float("inf")
 test_num = 250
 for repeat in range(10):
     success_rate = 0
-    success_list = [0] * 15
+    success_list = [0] * int(max_time / time_step_size)
     for env_idx in range(test_num):
         p_res_dir = osp.join(res_dir, "{}".format(env_idx))
         if not osp.exists(p_res_dir):
@@ -124,13 +126,11 @@ for repeat in range(10):
         res = solve_step_time(env, model, max_time, time_step_size)
         success_res = [tmp[0] for tmp in res]
         path_list = [tmp[1] for tmp in res]
-        for p in path_list:
-            if len(p) > 0:
-                # path = utils.interpolate(p)
-                # utils.visualize_nodes_global(mesh_path, occ_grid, path, maze.start, maze.goal, show=False, save=True, file_name=osp.join(learnt_log_dir, "planned_path.png"))
-                with open(osp.join(p_res_dir, 'planned_path.json'), 'w') as f:
-                    json.dump(p, f)
-                break
+        for idx, p in enumerate(path_list):
+            # path = utils.interpolate(p)
+            # utils.visualize_nodes_global(mesh_path, occ_grid, path, maze.start, maze.goal, show=False, save=True, file_name=osp.join(base_log_dir, "planned_path.png"))
+            with open(osp.join(p_res_dir, 'planned_path_{}_{}.json'.format(repeat, idx)), 'w') as f:
+                json.dump(p, f)
 
         for idx, res in enumerate(success_res):
             if res:

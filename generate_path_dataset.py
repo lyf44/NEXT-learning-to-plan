@@ -54,8 +54,8 @@ env_num = 25
 plan_num = 500
 
 data_dir = os.path.join(CUR_DIR, "../dataset/gibson/train")
-output_data_dir = os.path.join(CUR_DIR, "init_train_raw")
-output_data_dir2 = os.path.join(CUR_DIR, "init_train")
+output_data_dir = os.path.join(CUR_DIR, "dataset/train_raw")
+output_data_dir2 = os.path.join(CUR_DIR, "dataset/train")
 
 maze_dirs = []
 for path in Path(data_dir).rglob('env_small.obj'):
@@ -67,7 +67,7 @@ for path in Path(data_dir).rglob('env_small.obj'):
 #     print("generating test problem from {}".format(maze_dir))
 
 #     occ_grid = np.loadtxt(osp.join(maze_dir, "occ_grid_small.txt")).astype(np.uint8)
-#     G = nx.read_graphml(osp.join(maze_dir, "dense_g_small.graphml"))
+#     G = nx.read_graphml(osp.join(maze_dir, "dense_g_small.graphml.xml"))
 
 #     maze.clear_obstacles()
 #     maze.load_mesh(osp.join(maze_dir, "env_small.obj"))

@@ -21,6 +21,8 @@ CUR_DIR = osp.dirname(osp.abspath(__file__))
 
 def extract_path(search_tree):
     goal_id = search_tree.goal_idx
+    if goal_id == -1:
+        return []
 
     path = [search_tree.states[goal_id].tolist()]
     id = goal_id
@@ -52,12 +54,12 @@ def solve_step_time(env, model, max_time, step_size):
     search_tree = SearchTree(env=env, root=env.init_state, model=model, dim=env.dim)
 
     res = []
-    i = 0
-    for _ in range(step_size, max_time + 1, step_size):
+    t = step_size
+    while t < max_time + 1e-4:
         search_tree, success = NEXT_plan(env, model, max_allowed_time=step_size, search_tree=search_tree)
         path = extract_path(search_tree)
         res.append((success, path))
-        i += 1
+        t += step_size
     return res
 
 parser = argparse.ArgumentParser(description="Process some integers.")
@@ -124,13 +126,11 @@ for repeat in range(10):
         res = solve_step_extension(env, model, max_extension, ext_step_size)
         success_res = [tmp[0] for tmp in res]
         path_list = [tmp[1] for tmp in res]
-        for p in path_list:
-            if len(p) > 0:
-                # path = utils.interpolate(p)
-                # utils.visualize_nodes_global(mesh_path, occ_grid, path, maze.start, maze.goal, show=False, save=True, file_name=osp.join(learnt_log_dir, "planned_path.png"))
-                with open(osp.join(p_res_dir, 'planned_path.json'), 'w') as f:
-                    json.dump(p, f)
-                break
+        for idx, p in enumerate(path_list):
+            # path = utils.interpolate(p)
+            # utils.visualize_nodes_global(mesh_path, occ_grid, path, maze.start, maze.goal, show=False, save=True, file_name=osp.join(base_log_dir, "planned_path.png"))
+            with open(osp.join(p_res_dir, 'planned_path_{}_{}.json'.format(repeat, idx)), 'w') as f:
+                json.dump(p, f)
 
         for idx, res in enumerate(success_res):
             if res:

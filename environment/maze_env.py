@@ -331,7 +331,7 @@ class MyMazeEnv(MazeEnv):
         self._maze.robot.set_base_bounds(base_x_bounds, base_y_bounds)
 
         if not use_start_goal:
-            G = nx.read_graphml(osp.join(maze_dir, "dense_g_small.graphml"))
+            G = nx.read_graphml(osp.join(maze_dir, "dense_g_small.graphml.xml"))
             start, goal, expert_path = self.sample_problems(G)
         else:
             with open(osp.join(maze_dir, "start_goal.json")) as f:
