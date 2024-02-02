@@ -31,7 +31,7 @@ class Attention(nn.Module):
         self.coords = self.coords.view(1, 2, self.w, self.w)
 
         # 1x1 conv ~= mlp with shared parameters
-        self.mlp_share = nn.Sequential(
+        self.mlp_share = nn.Sequential(  # conv1x1
             nn.Conv2d(in_channels=4, out_channels=16, kernel_size=1),
             nn.ReLU(),
             nn.Conv2d(in_channels=16, out_channels=16, kernel_size=1),
@@ -59,23 +59,25 @@ class Attention(nn.Module):
         if cuda:
             self.coords = self.coords.cuda()
 
-    def forward(self, inp):
+    def forward(self, state):
         # x[0:b, 0:4, i, j] = [input[0:b, 0], input[0:b, 1], i, j]
         #   for i, j in {0, 1, ..., w-1}
-        x = inp[:, 0:2].contiguous().view(inp.shape[0], 2, 1, 1)
+
+        # The first 2 parameters are x,y location of the robot base.
+        x = state[:, 0:2].contiguous().view(state.shape[0], 2, 1, 1)
         x = x.expand(-1, -1, self.w, self.w)
         coords = self.coords.expand(x.shape[0], -1, -1, -1)
         x = torch.cat((x, coords), dim=1)
 
-        # attention over 2D grid
-        x = self.mlp_share(x)
+        # attention over 2D grid for x, y. 
+        x = self.mlp_share(x)  # conv1x1
         x = x.view(x.shape[0], -1)
         x = F.softmax(x, dim=-1)
         atten_12d = x.view(x.shape[0], 1, -1)
 
         # attention over the 3rd dimension
         # x = inp[:, 2:3]
-        x = inp
+        x = state
         x = self.mlp(x)
         x = F.softmax(x, dim=-1)
         atten_3d = x.view(x.shape[0], self.cap, 1)
@@ -190,9 +192,8 @@ class PPN(nn.Module):
 
         b_size = maze_map.shape[0]
 
-        goal_atten = self.attention_g(
-            goal_state
-        )  # has size [b_size, capacity, map_w, map_w]
+        # Get the goal state features
+        goal_atten = self.attention_g(goal_state)  # has size [b_size, capacity, map_w, map_w]
 
         # maze_map = maze_map.view(b_size, 1, self.env_width, self.env_width)
         # x = torch.cat((maze_map, goal_atten), dim=1)
