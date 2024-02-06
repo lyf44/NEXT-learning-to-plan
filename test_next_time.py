@@ -105,7 +105,7 @@ batch_num = 0
 best_loss = float("inf")
 
 test_num = 250
-for repeat in range(10):
+for repeat in range(7, 10):
     success_rate = 0
     success_list = [0] * int(max_time / time_step_size)
     for env_idx in range(test_num):
@@ -114,7 +114,7 @@ for repeat in range(10):
             os.mkdir(p_res_dir)
 
         model.net.eval()
-        problem = env.init_new_problem(use_start_goal=True)
+        problem = env.init_new_problem(index=env_idx, use_start_goal=True)
         model.set_problem(problem)
 
         g_explore_eps = 0.1

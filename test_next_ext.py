@@ -71,11 +71,11 @@ args = parser.parse_args()
 maze_dir = osp.join(CUR_DIR, "../dataset/test_env")
 model_path = osp.join(CUR_DIR, "models/next_v3.pt")
 # best_model_path = osp.join(CUR_DIR, "models/next_v2_best.pt")
-res_dir = osp.join(CUR_DIR, "../planner/eval_res/test_ext/{}".format(args.name))
+res_dir = osp.join(CUR_DIR, "../planner/eval_res/test_ext_500/{}".format(args.name))
 if not osp.exists(res_dir):
     os.makedirs(res_dir)
 
-max_extension = 300
+max_extension = 500
 ext_step_size = 25
 
 # Hyperparameters:
@@ -114,7 +114,7 @@ for repeat in range(10):
             os.mkdir(p_res_dir)
 
         model.net.eval()
-        problem = env.init_new_problem(use_start_goal=True)
+        problem = env.init_new_problem(index=env_idx, use_start_goal=True)
         model.set_problem(problem)
 
         g_explore_eps = 0.1

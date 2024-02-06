@@ -355,7 +355,7 @@ class MyMazeEnv(MazeEnv):
 
         if self.episode_i >= self.size:
             self.episode_i = 0
-            random.shuffle(self.order)
+            # random.shuffle(self.order)
 
         self.collision_check_count = 0
 
